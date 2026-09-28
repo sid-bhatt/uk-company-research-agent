@@ -1,0 +1,209 @@
+{
+  "active_count": 10,
+  "etag": "95d7a2c68d9c3c553519482b07d64711ad710ebe",
+  "items": [
+    {
+      "etag": "95d7a2c68d9c3c553519482b07d64711ad710ebe",
+      "appointed_on": "2024-12-19",
+      "is_pre_1992_appointment": false,
+      "links": {
+        "self": "/company/00502851/appointments/F4gVfGJWit5_w0BFf0u78BP4AeY",
+        "officer": {
+          "appointments": "/officers/_GQekD4FVPQMTKd2wTq0EIiXENc/appointments"
+        }
+      },
+      "name": "DICKSON, Sarah",
+      "officer_role": "secretary",
+      "person_number": "330532520001"
+    },
+    {
+      "etag": "95d7a2c68d9c3c553519482b07d64711ad710ebe",
+      "appointed_on": "2022-02-15",
+      "is_pre_1992_appointment": false,
+      "links": {
+        "self": "/company/00502851/appointments/bd9Z1eD07xI_o5B5g0SyiYwxQG8",
+        "officer": {
+          "appointments": "/officers/CrTUcR8xfBwEglUPrjdjpa6E1rA/appointments"
+        }
+      },
+      "name": "RICHARDS, Nina Jayne",
+      "officer_role": "secretary",
+      "person_number": "292561890001"
+    },
+    {
+      "etag": "3f9a1e1d3609fa5a9447f57f0ac41d213e732d00",
+      "appointed_on": "2022-02-01",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "United Kingdom",
+      "links": {
+        "self": "/company/00502851/appointments/PCFeNuptVdju4CRv-FGRHCADveM",
+        "officer": {
+          "appointments": "/officers/40I1k3uMSHd2pi3MEzXNkBiezC4/appointments"
+        }
+      },
+      "name": "CURRIE, Roisin",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "289532140002",
+      "identity_verification_details": {
+        "anti_money_laundering_supervisory_bodies": [
+          "Faculty Office of the Archbishop of Canterbury (FO)"
+        ],
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16",
+        "authorised_corporate_service_provider_name": "DE PINNA LLP ACSP",
+        "identity_verified_on": "2025-07-16",
+        "preferred_name": "Roisin Currie"
+      }
+    },
+    {
+      "etag": "92cbc25975b04805e4c71874f04db10ab6cc25ab",
+      "appointed_on": "2022-08-02",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "United Kingdom",
+      "links": {
+        "self": "/company/00502851/appointments/QKkpjX-ALuRASy23wRveH8bLO-k",
+        "officer": {
+          "appointments": "/officers/qbfSBKrgouZ58XZjqVP5x5e_EVg/appointments"
+        }
+      },
+      "name": "DAVIES, Matthew Samuel",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "298660230001",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16"
+      }
+    },
+    {
+      "etag": "ff9306c6643db516e10a21cd233e2f4e6f3add90",
+      "appointed_on": "2006-03-13",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/0o7wPK3YkTBV5NY8vbLYNpfD1Hg",
+        "officer": {
+          "appointments": "/officers/9ftniXY75ScaTVmAfS0XEytAE6Q/appointments"
+        }
+      },
+      "name": "HUTTON, Richard John",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "103074310002",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16"
+      }
+    },
+    {
+      "etag": "3a2e34c99a157f2f6f4f99333a623ebb7fe98e62",
+      "appointed_on": "2023-03-07",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/jcs1grvJvoAEYQtUfPCt7gwS4EA",
+        "officer": {
+          "appointments": "/officers/6oJxdSccppJ2kByHAHn1Xa6Ik4Q/appointments"
+        }
+      },
+      "name": "MILLS, Nigel Gordon",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "28385060001",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16"
+      }
+    },
+    {
+      "etag": "451cb4525b7e3a2db90744e9fa1ab59bf9201b58",
+      "appointed_on": "2024-06-01",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/BE9hPkvNKhBFvAQVX7wmxWG6G8s",
+        "officer": {
+          "appointments": "/officers/ptAr53kUmLkWvg8epozwIlSW7yc/appointments"
+        }
+      },
+      "name": "ROGERS, Tamara Jane",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "323875680002",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16"
+      }
+    },
+    {
+      "etag": "e77d710b4e7b05ca74ffaa69da00f182e31e98ca",
+      "appointed_on": "2026-07-01",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/y-i3EjGgdDjfv2qgJjrru79ImEo",
+        "officer": {
+          "appointments": "/officers/MuXKDkEAbmp2qqbQYHmXj4kkN-Y/appointments"
+        }
+      },
+      "name": "SINGH, Ikdeep",
+      "nationality": "American,Canadian",
+      "officer_role": "director",
+      "person_number": "350115420001",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-07-03"
+      }
+    },
+    {
+      "etag": "5affaee975b34a2ad903ec0b9a0ff26b8167d4f9",
+      "appointed_on": "2026-02-01",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/qYcvHt6Y4KrmHs9VK0CKKfAoQ-A",
+        "officer": {
+          "appointments": "/officers/JDU7EWGjS1mw-unVtk3pdTzeMPk/appointments"
+        }
+      },
+      "name": "SMOTHERS, Richard",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "303767740001",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-02-02"
+      }
+    },
+    {
+      "etag": "c8d4ea3455d45a8383dc32c96ee637493c9c4c1f",
+      "appointed_on": "2022-05-17",
+      "is_pre_1992_appointment": false,
+      "country_of_residence": "England",
+      "links": {
+        "self": "/company/00502851/appointments/Ud6pWx--FvXqJTuwME0y-GOiU8w",
+        "officer": {
+          "appointments": "/officers/7pAuKQAhKDzmTBQ3O1gF0pOa7Mk/appointments"
+        }
+      },
+      "name": "WEEDALL, Lynne Marie",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "172864460003",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-16"
+      }
+    }
+  ],
+  "items_per_page": 10,
+  "kind": "officer-list",
+  "links": {
+    "self": "/company/00502851/officers"
+  },
+  "resigned_count": 31,
+  "inactive_count": 0,
+  "start_index": 0,
+  "total_results": 41
+}

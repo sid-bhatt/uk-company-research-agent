@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psycopg[binary]>=3.2",
     "typer>=0.12",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
@@ -42,4 +43,5 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["integration: needs a running Postgres (docker compose up db)"]

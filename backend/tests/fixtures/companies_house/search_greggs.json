@@ -1,0 +1,147 @@
+{
+  "items": [
+    {
+      "address": {
+        "address_line_1": "Quorum Business Park",
+        "country": "United Kingdom",
+        "locality": "Newcastle Upon Tyne",
+        "postal_code": "NE12 8BU",
+        "premises": "Greggs House"
+      },
+      "address_snippet": "Greggs House, Quorum Business Park, Newcastle Upon Tyne, United Kingdom, NE12 8BU",
+      "company_number": "00502851",
+      "company_status": "active",
+      "company_type": "plc",
+      "date_of_creation": "1951-12-29",
+      "description": "00502851 - Incorporated on 29 December 1951",
+      "description_identifier": [
+        "incorporated-on"
+      ],
+      "kind": "searchresults#company",
+      "links": {
+        "self": "/company/00502851"
+      },
+      "matches": {
+        "snippet": []
+      },
+      "snippet": "GREGGS BAKERIES LIMITED",
+      "title": "GREGGS PLC"
+    },
+    {
+      "address": {
+        "address_line_1": "Methlick",
+        "country": "Scotland",
+        "locality": "Ellon",
+        "postal_code": "AB41 7EB",
+        "premises": "Collynie Farm"
+      },
+      "address_snippet": "Collynie Farm, Methlick, Ellon, Scotland, AB41 7EB",
+      "company_number": "SC702856",
+      "company_status": "dissolved",
+      "company_type": "ltd",
+      "date_of_cessation": "2026-08-11",
+      "date_of_creation": "2021-06-29",
+      "description": "SC702856 - Dissolved on 11 August 2026",
+      "description_identifier": [
+        "dissolved-on"
+      ],
+      "kind": "searchresults#company",
+      "links": {
+        "self": "/company/SC702856"
+      },
+      "matches": {
+        "snippet": []
+      },
+      "snippet": "",
+      "title": "GREGGS ACADEMIC SERVICES LTD"
+    },
+    {
+      "address": {
+        "address_line_1": "Cygnet Court Holly Lane",
+        "country": "England",
+        "locality": "Smethwick",
+        "postal_code": "B66 1QQ",
+        "premises": "11",
+        "region": "West Midlands"
+      },
+      "address_snippet": "11 Cygnet Court Holly Lane, Smethwick, West Midlands, England, B66 1QQ",
+      "company_number": "16546851",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2025-06-27",
+      "description": "16546851 - Incorporated on 27 June 2025",
+      "description_identifier": [
+        "incorporated-on"
+      ],
+      "kind": "searchresults#company",
+      "links": {
+        "self": "/company/16546851"
+      },
+      "matches": {
+        "snippet": []
+      },
+      "snippet": "",
+      "title": "GREGGS CARGO AND LOGISTICS UK LTD"
+    },
+    {
+      "address": {
+        "address_line_1": "Warren Close",
+        "country": "England",
+        "locality": "Brandon",
+        "postal_code": "IP27 0EE",
+        "premises": "48"
+      },
+      "address_snippet": "48 Warren Close, Brandon, England, IP27 0EE",
+      "company_number": "09888584",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2015-11-25",
+      "description": "09888584 - Incorporated on 25 November 2015",
+      "description_identifier": [
+        "incorporated-on"
+      ],
+      "kind": "searchresults#company",
+      "links": {
+        "self": "/company/09888584"
+      },
+      "matches": {
+        "snippet": []
+      },
+      "snippet": "",
+      "title": "GREGGS CARPENTRY LIMITED"
+    },
+    {
+      "address": {
+        "address_line_1": "Cautley Drive",
+        "address_line_2": "Killinghall",
+        "country": "England",
+        "locality": "Harrogate",
+        "postal_code": "HG3 2DJ",
+        "premises": "75"
+      },
+      "address_snippet": "75 Cautley Drive, Killinghall, Harrogate, England, HG3 2DJ",
+      "company_number": "11736174",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2018-12-20",
+      "description": "11736174 - Incorporated on 20 December 2018",
+      "description_identifier": [
+        "incorporated-on"
+      ],
+      "kind": "searchresults#company",
+      "links": {
+        "self": "/company/11736174"
+      },
+      "matches": {
+        "snippet": []
+      },
+      "snippet": "",
+      "title": "GREGGS GARDENING SERVICES LTD"
+    }
+  ],
+  "items_per_page": 5,
+  "kind": "search#companies",
+  "page_number": 1,
+  "start_index": 0,
+  "total_results": 57
+}

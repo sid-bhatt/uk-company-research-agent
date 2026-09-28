@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     env: str = "local"
     database_url: str = "postgresql://ukco:ukco@localhost:5432/ukco"
     companies_house_api_key: SecretStr | None = None
+    # Requests per 5-minute window; Companies House allows 600 per key.
+    companies_house_rate_limit: int = 550
+    cache_dir: str = ".cache"
 
 
 @lru_cache
