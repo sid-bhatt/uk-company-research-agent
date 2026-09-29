@@ -1,0 +1,33 @@
+{
+  "active_count": 1,
+  "ceased_count": 0,
+  "items": [
+    {
+      "ceased": false,
+      "country_of_residence": "England",
+      "etag": "8ce3053ea8dd862b2c2b8f824403e420ed2c85aa",
+      "identity_verification_details": {
+        "appointment_verification_statement_date": "2026-03-02",
+        "appointment_verification_statement_due_on": "2026-03-15"
+      },
+      "kind": "individual-person-with-significant-control",
+      "links": {
+        "self": "/company/13237895/persons-with-significant-control/individual/zovGVodL3OdqO_tg6AFtdZaSesU"
+      },
+      "name": "PERSON 2",
+      "nationality": "British",
+      "natures_of_control": [
+        "ownership-of-shares-75-to-100-percent",
+        "voting-rights-75-to-100-percent",
+        "right-to-appoint-and-remove-directors"
+      ],
+      "notified_on": "2021-03-02"
+    }
+  ],
+  "items_per_page": 100,
+  "links": {
+    "self": "/company/13237895/persons-with-significant-control"
+  },
+  "start_index": 0,
+  "total_results": 1
+}

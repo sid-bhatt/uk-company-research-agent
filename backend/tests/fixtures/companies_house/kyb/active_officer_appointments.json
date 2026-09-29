@@ -1,0 +1,37 @@
+{
+  "active_count": 1,
+  "etag": "d5b6813c57f44b65f8038f70d324eb2a4324efa5",
+  "inactive_count": 0,
+  "is_corporate_officer": false,
+  "items": [
+    {
+      "appointed_on": "2021-03-02",
+      "appointed_to": {
+        "company_name": "QUALITY EDUCATIONAL AND BUSINESS SOLUTIONS LTD",
+        "company_number": "13237895",
+        "company_status": "active"
+      },
+      "country_of_residence": "England",
+      "identity_verification_details": {
+        "appointment_verification_end_on": "9999-12-31",
+        "appointment_verification_start_on": "2026-04-02"
+      },
+      "is_pre_1992_appointment": false,
+      "links": {
+        "company": "/company/13237895"
+      },
+      "name": "PERSON 3",
+      "nationality": "British",
+      "officer_role": "director"
+    }
+  ],
+  "items_per_page": 50,
+  "kind": "personal-appointment",
+  "links": {
+    "self": "/officers/MW0TiWNhhtHtG2lI8OlGmtTDwPo/appointments"
+  },
+  "name": "PERSON 3",
+  "resigned_count": 0,
+  "start_index": 0,
+  "total_results": 1
+}

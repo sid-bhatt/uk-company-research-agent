@@ -1,0 +1,58 @@
+{
+  "accounts": {
+    "accounting_reference_date": {
+      "day": "05",
+      "month": "04"
+    },
+    "last_accounts": {
+      "made_up_to": "2025-04-05",
+      "period_end_on": "2025-04-05",
+      "period_start_on": "2024-04-06",
+      "type": "dormant"
+    },
+    "next_accounts": {
+      "due_on": "2027-01-05",
+      "overdue": false,
+      "period_end_on": "2026-04-05",
+      "period_start_on": "2025-04-06"
+    },
+    "next_due": "2027-01-05",
+    "next_made_up_to": "2026-04-05",
+    "overdue": false
+  },
+  "can_file": true,
+  "company_name": "QUALITY EDUCATIONAL AND BUSINESS SOLUTIONS LTD",
+  "company_number": "13237895",
+  "company_status": "active",
+  "confirmation_statement": {
+    "last_made_up_to": "2026-03-01",
+    "next_due": "2027-03-15",
+    "next_made_up_to": "2027-03-01",
+    "overdue": false
+  },
+  "date_of_creation": "2021-03-02",
+  "etag": "f9a62720fe47f3c4b8fef5c6a3c11717a121ae0f",
+  "has_charges": false,
+  "has_insolvency_history": false,
+  "has_super_secure_pscs": false,
+  "jurisdiction": "england-wales",
+  "links": {
+    "filing_history": "/company/13237895/filing-history",
+    "officers": "/company/13237895/officers",
+    "persons_with_significant_control": "/company/13237895/persons-with-significant-control",
+    "self": "/company/13237895"
+  },
+  "registered_office_address": {
+    "address_line_1": "ADDRESS 1",
+    "country": "England"
+  },
+  "registered_office_is_in_dispute": false,
+  "sic_codes": [
+    "70229",
+    "85320",
+    "85590",
+    "85600"
+  ],
+  "type": "ltd",
+  "undeliverable_registered_office_address": false
+}

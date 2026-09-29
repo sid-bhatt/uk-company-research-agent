@@ -1,0 +1,66 @@
+{
+  "active_count": 2,
+  "ceased_count": 1,
+  "items": [
+    {
+      "ceased": false,
+      "country_of_residence": "England",
+      "etag": "7d8ac347c3bf01ecd34e31f235dc8d4e86a42a7d",
+      "identity_verification_details": {
+        "appointment_verification_statement_date": "2026-03-03",
+        "appointment_verification_statement_due_on": "2026-03-16"
+      },
+      "kind": "individual-person-with-significant-control",
+      "links": {
+        "self": "/company/13236560/persons-with-significant-control/individual/PyNyK8Fb_BXmyHDTVNavzYUPxjw"
+      },
+      "name": "PERSON 7",
+      "nationality": "British",
+      "natures_of_control": [
+        "ownership-of-shares-25-to-50-percent"
+      ],
+      "notified_on": "2021-03-02"
+    },
+    {
+      "ceased": false,
+      "country_of_residence": "England",
+      "etag": "2ff6d9d838ddb3b06d755ab6c2f7cec73807b90b",
+      "identity_verification_details": {
+        "appointment_verification_statement_date": "2026-03-03",
+        "appointment_verification_statement_due_on": "2026-03-16"
+      },
+      "kind": "individual-person-with-significant-control",
+      "links": {
+        "self": "/company/13236560/persons-with-significant-control/individual/r3pO21iWnzZjMqrnZw5ogZyQfFo"
+      },
+      "name": "PERSON 8",
+      "nationality": "Scottish",
+      "natures_of_control": [
+        "ownership-of-shares-25-to-50-percent"
+      ],
+      "notified_on": "2021-03-02"
+    },
+    {
+      "ceased": true,
+      "ceased_on": "2021-03-02",
+      "etag": "4ab0986f3e9f31362391d18a591ecc69062a1beb",
+      "kind": "corporate-entity-person-with-significant-control",
+      "links": {
+        "self": "/company/13236560/persons-with-significant-control/corporate-entity/7CxGrtgvU8tx7655uKU_FFYgSzc"
+      },
+      "name": "PERSON 9",
+      "natures_of_control": [
+        "ownership-of-shares-75-to-100-percent",
+        "voting-rights-75-to-100-percent",
+        "right-to-appoint-and-remove-directors"
+      ],
+      "notified_on": "2021-03-01"
+    }
+  ],
+  "items_per_page": 100,
+  "links": {
+    "self": "/company/13236560/persons-with-significant-control"
+  },
+  "start_index": 0,
+  "total_results": 3
+}

@@ -1,0 +1,70 @@
+{
+  "active_count": 2,
+  "etag": "2865f0468b09cd66703f17b56f3acd3079c3d249",
+  "inactive_count": 0,
+  "items": [
+    {
+      "appointed_on": "2021-03-02",
+      "country_of_residence": "England",
+      "etag": "2865f0468b09cd66703f17b56f3acd3079c3d249",
+      "identity_verification_details": {
+        "appointment_verification_statement_due_on": "2025-11-18"
+      },
+      "is_pre_1992_appointment": false,
+      "links": {
+        "officer": {
+          "appointments": "/officers/Bx8U8Bi9yUxj-6rIW8vLC6g-s1Y/appointments"
+        },
+        "self": "/company/13236560/appointments/jnUAxEDUn_7ju8-qk9k5B6dfCMw"
+      },
+      "name": "PERSON 4",
+      "nationality": "Scottish",
+      "officer_role": "director",
+      "person_number": "280337310001"
+    },
+    {
+      "appointed_on": "2021-03-02",
+      "country_of_residence": "England",
+      "etag": "f367b82ff43d831a6e572a91c53ac94bf92a8e6b",
+      "identity_verification_details": {
+        "appointment_verification_statement_due_on": "2025-11-18"
+      },
+      "is_pre_1992_appointment": false,
+      "links": {
+        "officer": {
+          "appointments": "/officers/gBIq6MUMuffBlibV4Rkv08SBu_I/appointments"
+        },
+        "self": "/company/13236560/appointments/ULdQFbxIIhnmAqfHq2UAkDJvUng"
+      },
+      "name": "PERSON 5",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "257883000001"
+    },
+    {
+      "appointed_on": "2021-03-01",
+      "country_of_residence": "England",
+      "etag": "d46da3f057f74cd6b737caa7ce563983f3d022b2",
+      "is_pre_1992_appointment": false,
+      "links": {
+        "officer": {
+          "appointments": "/officers/Q95tb8WpmOfsw_-cxyk2AqVgdHY/appointments"
+        },
+        "self": "/company/13236560/appointments/Sz21IkSRKtxmWIjXvOczZUtMQGI"
+      },
+      "name": "PERSON 6",
+      "nationality": "British",
+      "officer_role": "director",
+      "person_number": "201779310001",
+      "resigned_on": "2021-03-02"
+    }
+  ],
+  "items_per_page": 100,
+  "kind": "officer-list",
+  "links": {
+    "self": "/company/13236560/officers"
+  },
+  "resigned_count": 1,
+  "start_index": 0,
+  "total_results": 3
+}

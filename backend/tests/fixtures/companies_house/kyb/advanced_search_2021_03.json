@@ -1,0 +1,217 @@
+{
+  "etag": "c445bd4513d5d3c0e4ad47d75e1475c41eb1a1fa",
+  "hits": 6840,
+  "items": [
+    {
+      "company_name": "QUALITY EDUCATIONAL AND BUSINESS SOLUTIONS LTD",
+      "company_number": "13237895",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13237895"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 1",
+        "country": "England"
+      },
+      "sic_codes": [
+        "70229",
+        "85320",
+        "85590",
+        "85600"
+      ]
+    },
+    {
+      "company_name": "HOME OWNERSHIP LIMITED",
+      "company_number": "13237917",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13237917"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 2",
+        "country": "England"
+      },
+      "sic_codes": [
+        "68201"
+      ]
+    },
+    {
+      "company_name": "PROFIX 365 LIMITED",
+      "company_number": "13236662",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-01",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13236662"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 3",
+        "country": "England"
+      },
+      "sic_codes": [
+        "41100"
+      ]
+    },
+    {
+      "company_name": "DVS CAPITAL LTD",
+      "company_number": "13236950",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-01",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13236950"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 4",
+        "country": "United Kingdom"
+      },
+      "sic_codes": [
+        "96090"
+      ]
+    },
+    {
+      "company_name": "GRAD TRADING LTD",
+      "company_number": "13240361",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13240361"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 5",
+        "country": "England"
+      },
+      "sic_codes": [
+        "47190",
+        "47910"
+      ]
+    },
+    {
+      "company_name": "ABBYRAZ LIMITED",
+      "company_number": "13237393",
+      "company_status": "dissolved",
+      "company_type": "ltd",
+      "date_of_cessation": "2024-05-28",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13237393"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 6",
+        "country": "England"
+      },
+      "sic_codes": [
+        "87200"
+      ]
+    },
+    {
+      "company_name": "WANDERFUL LTD",
+      "company_number": "13239970",
+      "company_status": "active",
+      "company_type": "ltd",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13239970"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 7",
+        "country": "United Kingdom"
+      },
+      "sic_codes": [
+        "85590"
+      ]
+    },
+    {
+      "company_name": "ASTROBAE LIMITED",
+      "company_number": "13234850",
+      "company_status": "dissolved",
+      "company_type": "ltd",
+      "date_of_cessation": "2024-05-28",
+      "date_of_creation": "2021-03-01",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13234850"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 8",
+        "country": "England"
+      },
+      "sic_codes": [
+        "96090"
+      ]
+    },
+    {
+      "company_name": "AG FAST DELIVERY LTD",
+      "company_number": "13235678",
+      "company_status": "dissolved",
+      "company_type": "ltd",
+      "date_of_cessation": "2024-05-28",
+      "date_of_creation": "2021-03-01",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13235678"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 9",
+        "country": "England"
+      },
+      "sic_codes": [
+        "49420",
+        "52290"
+      ]
+    },
+    {
+      "company_name": "DOMINIUM HOLDINGS LTD",
+      "company_number": "13239692",
+      "company_status": "dissolved",
+      "company_type": "ltd",
+      "date_of_cessation": "2024-05-28",
+      "date_of_creation": "2021-03-02",
+      "kind": "search-results#company",
+      "links": {
+        "company_profile": "/company/13239692"
+      },
+      "registered_office_address": {
+        "address_line_1": "ADDRESS 10",
+        "country": "England"
+      },
+      "sic_codes": [
+        "99999"
+      ]
+    }
+  ],
+  "kind": "search#advanced-search",
+  "top_hit": {
+    "company_name": "QUALITY EDUCATIONAL AND BUSINESS SOLUTIONS LTD",
+    "company_number": "13237895",
+    "company_status": "active",
+    "company_type": "ltd",
+    "date_of_creation": "2021-03-02",
+    "kind": "search-results#company",
+    "links": {
+      "company_profile": "/company/13237895"
+    },
+    "registered_office_address": {
+      "address_line_1": "ADDRESS 1",
+      "country": "England"
+    },
+    "sic_codes": [
+      "70229",
+      "85320",
+      "85590",
+      "85600"
+    ]
+  }
+}

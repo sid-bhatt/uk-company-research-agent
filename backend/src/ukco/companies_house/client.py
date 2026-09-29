@@ -12,7 +12,7 @@ import asyncio
 import datetime as dt
 import random
 import re
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Self
 from urllib.parse import urlparse
@@ -21,13 +21,20 @@ import httpx
 
 from ukco.companies_house.cache import DiskCache
 from ukco.companies_house.models import (
+    AdvancedSearchResult,
+    ChargeList,
     CompanyProfile,
     CompanySearchResult,
     DocumentMetadata,
     FilingHistoryItem,
     FilingHistoryList,
+    Insolvency,
     Officer,
+    OfficerAppointmentList,
     OfficerList,
+    OfficerNetwork,
+    PscList,
+    PscStatementList,
 )
 from ukco.companies_house.ratelimit import RateLimiter
 
@@ -39,6 +46,7 @@ DAY = 24 * HOUR
 
 _COMPANY_NUMBER = re.compile(r"^[A-Z0-9]{8}$")
 _DOCUMENT_ID = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+_OFFICER_ID = re.compile(r"^[A-Za-z0-9_-]{10,64}$")
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
@@ -78,6 +86,17 @@ def _validate_document_id(value: str) -> str:
     return value
 
 
+def _validate_officer_id(value: str) -> str:
+    if not _OFFICER_ID.fullmatch(value):
+        raise ValueError(f"Invalid officer id: {value!r}")
+    return value
+
+
+# Called with (path, params, body) for every JSON response the client returns, cached or
+# not. The report builder uses it to snapshot the exact evidence behind each flag.
+JsonObserver = Callable[[str, Mapping[str, Any], Any], None]
+
+
 @dataclass(frozen=True)
 class RetryPolicy:
     max_attempts: int = 5
@@ -100,6 +119,7 @@ class CompaniesHouseClient:
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         timeout: float = 30.0,
+        on_json: JsonObserver | None = None,
     ) -> None:
         if not api_key:
             raise AuthError("Companies House API key is empty; set COMPANIES_HOUSE_API_KEY")
@@ -107,6 +127,7 @@ class CompaniesHouseClient:
         self._limiter = limiter or RateLimiter(sleep=sleep)
         self._retry = retry or RetryPolicy()
         self._sleep = sleep
+        self.on_json = on_json
         # API key goes in as HTTP Basic username with an empty password.
         self._http = httpx.AsyncClient(
             auth=(api_key, ""),
@@ -211,6 +232,99 @@ class CompaniesHouseClient:
             if not page.items or start >= page.total_count:
                 return
 
+    async def list_pscs(self, company_number: str) -> PscList:
+        """People with significant control, active and ceased. Listed companies have none."""
+        number = normalise_company_number(company_number)
+        data = await self._get_json_or_empty(
+            f"{API_BASE_URL}/company/{number}/persons-with-significant-control",
+            {"items_per_page": 100},
+            ttl=DAY,
+        )
+        return PscList.model_validate(data)
+
+    async def list_psc_statements(self, company_number: str) -> PscStatementList:
+        """Statements such as "no registrable person" or "PSC not identified"."""
+        number = normalise_company_number(company_number)
+        data = await self._get_json_or_empty(
+            f"{API_BASE_URL}/company/{number}/persons-with-significant-control-statements",
+            {"items_per_page": 100},
+            ttl=DAY,
+        )
+        return PscStatementList.model_validate(data)
+
+    async def list_officer_appointments(
+        self, officer_id: str, *, start_index: int = 0, items_per_page: int = 50
+    ) -> OfficerAppointmentList:
+        oid = _validate_officer_id(officer_id)
+        data = await self._get_json(
+            f"{API_BASE_URL}/officers/{oid}/appointments",
+            {"start_index": start_index, "items_per_page": items_per_page},
+            ttl=DAY,
+        )
+        return OfficerAppointmentList.model_validate(data)
+
+    async def get_officer_network(self, officer_id: str, *, max_items: int = 200) -> OfficerNetwork:
+        """Every company this person is or was an officer of, capped at `max_items`.
+
+        Nominee directors and corporate secretaries can have thousands of appointments;
+        the cap bounds the rate-limit cost and `truncated` makes the gap visible.
+        """
+        first = await self.list_officer_appointments(officer_id)
+        items = list(first.items)
+        while items and len(items) < min(first.total_results, max_items):
+            page = await self.list_officer_appointments(officer_id, start_index=len(items))
+            if not page.items:
+                break
+            items.extend(page.items)
+        return OfficerNetwork(
+            officer_id=officer_id,
+            name=first.name,
+            is_corporate_officer=first.is_corporate_officer,
+            total_results=first.total_results,
+            appointments=items[:max_items],
+            truncated=first.total_results > max_items,
+        )
+
+    async def list_charges(self, company_number: str) -> ChargeList:
+        number = normalise_company_number(company_number)
+        data = await self._get_json_or_empty(
+            f"{API_BASE_URL}/company/{number}/charges", {"items_per_page": 100}, ttl=DAY
+        )
+        return ChargeList.model_validate(data)
+
+    async def get_insolvency(self, company_number: str) -> Insolvency:
+        """Insolvency cases; empty when the company has none (the API answers 404)."""
+        number = normalise_company_number(company_number)
+        data = await self._get_json_or_empty(f"{API_BASE_URL}/company/{number}/insolvency", ttl=DAY)
+        return Insolvency.model_validate(data)
+
+    async def advanced_search(
+        self,
+        *,
+        incorporated_from: dt.date | None = None,
+        incorporated_to: dt.date | None = None,
+        company_status: Sequence[str] = (),
+        company_type: Sequence[str] = (),
+        sic_codes: Sequence[str] = (),
+        size: int = 100,
+        start_index: int = 0,
+    ) -> AdvancedSearchResult:
+        """Filtered company search. Used to sample the labelled eval population."""
+        params: dict[str, Any] = {"size": min(size, 5000), "start_index": start_index}
+        if incorporated_from:
+            params["incorporated_from"] = incorporated_from.isoformat()
+        if incorporated_to:
+            params["incorporated_to"] = incorporated_to.isoformat()
+        for name, values in (
+            ("company_status", company_status),
+            ("company_type", company_type),
+            ("sic_codes", sic_codes),
+        ):
+            if values:
+                params[name] = ",".join(values)
+        data = await self._get_json(f"{API_BASE_URL}/advanced-search/companies", params, ttl=HOUR)
+        return AdvancedSearchResult.model_validate(data)
+
     async def get_document_metadata(self, document_id: str) -> DocumentMetadata:
         doc_id = _validate_document_id(document_id)
         data = await self._get_json(f"{DOCUMENT_API_BASE_URL}/document/{doc_id}", ttl=None)
@@ -249,12 +363,26 @@ class CompaniesHouseClient:
         self, url: str, params: Mapping[str, Any] | None = None, *, ttl: float | None
     ) -> Any:
         cache_key = DiskCache.key(url, dict(params or {}))
-        if self._cache and (hit := self._cache.get_json(cache_key, ttl)) is not None:
-            return hit
-        data = (await self._send(url, params=params)).json()
-        if self._cache:
-            self._cache.set_json(cache_key, data)
+        data = self._cache.get_json(cache_key, ttl) if self._cache else None
+        if data is None:
+            data = (await self._send(url, params=params)).json()
+            if self._cache:
+                self._cache.set_json(cache_key, data)
+        if self.on_json:
+            self.on_json(_path(url), dict(params or {}), data)
         return data
+
+    async def _get_json_or_empty(
+        self, url: str, params: Mapping[str, Any] | None = None, *, ttl: float | None
+    ) -> Any:
+        """For registers where 404 means "nothing recorded" (PSCs, charges, insolvency)."""
+        try:
+            return await self._get_json(url, params, ttl=ttl)
+        except NotFoundError:
+            # Absence is evidence too ("no insolvency on record as of <date>").
+            if self.on_json:
+                self.on_json(_path(url), dict(params or {}), {})
+            return {}
 
     async def _send(
         self,

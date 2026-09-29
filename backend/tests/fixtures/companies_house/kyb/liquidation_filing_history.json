@@ -1,0 +1,393 @@
+{
+  "filing_history_status": "filing-history-available",
+  "items": [
+    {
+      "action_date": "2026-04-01",
+      "barcode": "YF2SFGO2",
+      "category": "insolvency",
+      "date": "2026-06-03",
+      "description": "liquidation-voluntary-statement-of-receipts-and-payments-with-brought-down-date",
+      "description_values": {
+        "brought_down_date": "2026-04-01"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/98_Dr2Dv5MSKJI-PtCY8U165u_pU369zTAPStbSAxJA",
+        "self": "/company/13236560/filing-history/MzUyMzQzODQwNmFkaXF6a2N4"
+      },
+      "pages": 9,
+      "paper_filed": true,
+      "subcategory": "voluntary",
+      "transaction_id": "MzUyMzQzODQwNmFkaXF6a2N4",
+      "type": "LIQ03"
+    },
+    {
+      "action_date": "2025-04-01",
+      "barcode": "YE56H0LE",
+      "category": "insolvency",
+      "date": "2025-06-24",
+      "description": "liquidation-voluntary-statement-of-receipts-and-payments-with-brought-down-date",
+      "description_values": {
+        "brought_down_date": "2025-04-01"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/7QWiuICVP3-hnXkgpq7yGEtNpJAQJcD7yI3Lq42IEvs",
+        "self": "/company/13236560/filing-history/MzQ3MTAzNDA3MmFkaXF6a2N4"
+      },
+      "pages": 9,
+      "paper_filed": true,
+      "subcategory": "voluntary",
+      "transaction_id": "MzQ3MTAzNDA3MmFkaXF6a2N4",
+      "type": "LIQ03"
+    },
+    {
+      "action_date": "2024-03-31",
+      "barcode": "XD36QZ36",
+      "category": "accounts",
+      "date": "2024-05-15",
+      "description": "accounts-with-accounts-type-total-exemption-full",
+      "description_values": {
+        "made_up_date": "2024-03-31"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/kZkpYudyyfyHJHjptxhIiXdqUFaL3m85gxaZUmJhMRE",
+        "self": "/company/13236560/filing-history/MzQyMjA0NjYxM2FkaXF6a2N4"
+      },
+      "pages": 6,
+      "transaction_id": "MzQyMjA0NjYxM2FkaXF6a2N4",
+      "type": "AA"
+    },
+    {
+      "barcode": "YD09F3KG",
+      "category": "insolvency",
+      "date": "2024-04-14",
+      "description": "liquidation-voluntary-declaration-of-solvency",
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/lc3VuPj2BPkO08KzBs_IzSvlKiwFcjf6rNnll-Khgp8",
+        "self": "/company/13236560/filing-history/MzQxNzAzNTAyOWFkaXF6a2N4"
+      },
+      "pages": 6,
+      "paper_filed": true,
+      "subcategory": "voluntary",
+      "transaction_id": "MzQxNzAzNTAyOWFkaXF6a2N4",
+      "type": "LIQ01"
+    },
+    {
+      "barcode": "YD09F2VT",
+      "category": "insolvency",
+      "date": "2024-04-14",
+      "description": "liquidation-voluntary-appointment-of-liquidator",
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/GM9DeYPyYmbqDKzELRofpfEjydBgQ7McsfKsaQLCBCg",
+        "self": "/company/13236560/filing-history/MzQxNzAzNDkwMmFkaXF6a2N4"
+      },
+      "pages": 3,
+      "paper_filed": true,
+      "subcategory": "voluntary",
+      "transaction_id": "MzQxNzAzNDkwMmFkaXF6a2N4",
+      "type": "600"
+    },
+    {
+      "category": "resolution",
+      "date": "2024-04-14",
+      "description": "resolution",
+      "description_values": {
+        "description": "Resolutions"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/m9PeYeZse3IbOZEZFCkcmyfvG1KRXFm-mfGLuPchY2s",
+        "self": "/company/13236560/filing-history/WUQwOUYzVE1hZGlxemtjeA"
+      },
+      "pages": 1,
+      "paper_filed": true,
+      "resolutions": [
+        {
+          "category": "liquidation",
+          "description": "liquidation-voluntary-special-resolution-to-wind-up-case-start-date",
+          "description_values": {
+            "case_start_date": "2024-04-02"
+          },
+          "original_description": "Special resolution to wind up",
+          "subcategory": [
+            "voluntary",
+            "resolution"
+          ],
+          "type": "LRESSP"
+        }
+      ],
+      "transaction_id": "WUQwOUYzVE1hZGlxemtjeA",
+      "type": "RESOLUTIONS"
+    },
+    {
+      "action_date": "2024-04-14",
+      "barcode": "YD09F4H5",
+      "category": "address",
+      "date": "2024-04-14",
+      "description": "change-registered-office-address-company-with-date-old-address-new-address",
+      "description_values": {
+        "change_date": "2024-04-14",
+        "new_address": "ADDRESS 64",
+        "old_address": "ADDRESS 63"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/ss_YGl-S_ZyDlUkIo3g6svphff377-MPVZRx6b6O_YE",
+        "self": "/company/13236560/filing-history/MzQxNzAzNTI0M2FkaXF6a2N4"
+      },
+      "pages": 3,
+      "paper_filed": true,
+      "transaction_id": "MzQxNzAzNTI0M2FkaXF6a2N4",
+      "type": "AD01"
+    },
+    {
+      "action_date": "2023-03-31",
+      "barcode": "XC6I83QZ",
+      "category": "accounts",
+      "date": "2023-06-26",
+      "description": "accounts-with-accounts-type-total-exemption-full",
+      "description_values": {
+        "made_up_date": "2023-03-31"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/F1aVc8rxbn0PtkE1eZFwpsQb7DVipq3ojwwn_uXO3w4",
+        "self": "/company/13236560/filing-history/MzM4NDEzMDYzNWFkaXF6a2N4"
+      },
+      "pages": 4,
+      "transaction_id": "MzM4NDEzMDYzNWFkaXF6a2N4",
+      "type": "AA"
+    },
+    {
+      "action_date": "2023-03-02",
+      "barcode": "XBYW7ZOB",
+      "category": "confirmation-statement",
+      "date": "2023-03-08",
+      "description": "confirmation-statement-with-no-updates",
+      "description_values": {
+        "made_up_date": "2023-03-02"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/STcTnQdoNxbNHWhtUn11-7XC1vPiCjwEdVla1sPvJnE",
+        "self": "/company/13236560/filing-history/MzM3MTg5NjA2OGFkaXF6a2N4"
+      },
+      "pages": 3,
+      "transaction_id": "MzM3MTg5NjA2OGFkaXF6a2N4",
+      "type": "CS01"
+    },
+    {
+      "action_date": "2022-03-31",
+      "barcode": "XB6NI9YB",
+      "category": "accounts",
+      "date": "2022-06-21",
+      "description": "accounts-with-accounts-type-total-exemption-full",
+      "description_values": {
+        "made_up_date": "2022-03-31"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/cA4q9dIynBxZ_inJb4nFgk-Xb71tVAIBdcFkLgN_pcc",
+        "self": "/company/13236560/filing-history/MzM0MzE2Nzc1OWFkaXF6a2N4"
+      },
+      "pages": 4,
+      "transaction_id": "MzM0MzE2Nzc1OWFkaXF6a2N4",
+      "type": "AA"
+    },
+    {
+      "action_date": "2022-03-02",
+      "barcode": "XAZSCE6G",
+      "category": "confirmation-statement",
+      "date": "2022-03-14",
+      "description": "confirmation-statement-with-no-updates",
+      "description_values": {
+        "made_up_date": "2022-03-02"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/d6iH8BZexonbGP0H-EZA4MOkbty-1W3TieWoofIjhUk",
+        "self": "/company/13236560/filing-history/MzMzMjc0NjY4NWFkaXF6a2N4"
+      },
+      "pages": 3,
+      "transaction_id": "MzMzMjc0NjY4NWFkaXF6a2N4",
+      "type": "CS01"
+    },
+    {
+      "action_date": "2021-03-18",
+      "barcode": "XA0JSEEX",
+      "category": "address",
+      "date": "2021-03-18",
+      "description": "change-registered-office-address-company-with-date-old-address-new-address",
+      "description_values": {
+        "change_date": "2021-03-18",
+        "new_address": "ADDRESS 66",
+        "old_address": "ADDRESS 65"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/BhsrETIjPf2KXvmWcnwsKyBV5HXbxv3NlYSe1nsMGOU",
+        "self": "/company/13236560/filing-history/MzI5NDc3ODg1MWFkaXF6a2N4"
+      },
+      "pages": 1,
+      "transaction_id": "MzI5NDc3ODg1MWFkaXF6a2N4",
+      "type": "AD01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCV8R",
+      "category": "confirmation-statement",
+      "date": "2021-03-02",
+      "description": "confirmation-statement-with-updates",
+      "description_values": {
+        "made_up_date": "2021-03-02"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/RS5nMPws3p15a62Xmv74twSBP-YzFIS261osGmDdw1Q",
+        "self": "/company/13236560/filing-history/MzI5MzAwMDY5MGFkaXF6a2N4"
+      },
+      "pages": 5,
+      "transaction_id": "MzI5MzAwMDY5MGFkaXF6a2N4",
+      "type": "CS01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCQG0",
+      "category": "persons-with-significant-control",
+      "date": "2021-03-02",
+      "description": "notification-of-a-person-with-significant-control",
+      "description_values": {
+        "notification_date": "2021-03-02",
+        "psc_name": "PERSON 12"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/zTIF3GHrIrm4G6z1b_wpdTWtvq6r8LBbbixLeqVBov0",
+        "self": "/company/13236560/filing-history/MzI5Mjk5OTQxNmFkaXF6a2N4"
+      },
+      "pages": 2,
+      "subcategory": "notifications",
+      "transaction_id": "MzI5Mjk5OTQxNmFkaXF6a2N4",
+      "type": "PSC01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCM7L",
+      "category": "persons-with-significant-control",
+      "date": "2021-03-02",
+      "description": "notification-of-a-person-with-significant-control",
+      "description_values": {
+        "notification_date": "2021-03-02",
+        "psc_name": "PERSON 13"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/WF13OfFKeammTUiZeVfbRCEA3kE_jT4P0NsF0bV8udo",
+        "self": "/company/13236560/filing-history/MzI5Mjk5ODM3N2FkaXF6a2N4"
+      },
+      "pages": 2,
+      "subcategory": "notifications",
+      "transaction_id": "MzI5Mjk5ODM3N2FkaXF6a2N4",
+      "type": "PSC01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCKW0",
+      "category": "officers",
+      "date": "2021-03-02",
+      "description": "termination-director-company-with-name-termination-date",
+      "description_values": {
+        "officer_name": "PERSON 14",
+        "termination_date": "2021-03-02"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/qysh8jtQR9RetdWzWItC-s6VwsDC-VF51JZMck_frWM",
+        "self": "/company/13236560/filing-history/MzI5Mjk5ODA3OGFkaXF6a2N4"
+      },
+      "pages": 1,
+      "subcategory": "termination",
+      "transaction_id": "MzI5Mjk5ODA3OGFkaXF6a2N4",
+      "type": "TM01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCEOR",
+      "category": "officers",
+      "date": "2021-03-02",
+      "description": "appoint-person-director-company-with-name-date",
+      "description_values": {
+        "appointment_date": "2021-03-02",
+        "officer_name": "PERSON 8"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/XCf9Wu5WIkti6wWUpCoaarL5s4Ed4DRy2Y6PIm2PFro",
+        "self": "/company/13236560/filing-history/MzI5Mjk5NjU3M2FkaXF6a2N4"
+      },
+      "pages": 2,
+      "subcategory": "appointments",
+      "transaction_id": "MzI5Mjk5NjU3M2FkaXF6a2N4",
+      "type": "AP01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCCJE",
+      "category": "officers",
+      "date": "2021-03-02",
+      "description": "appoint-person-director-company-with-name-date",
+      "description_values": {
+        "appointment_date": "2021-03-02",
+        "officer_name": "PERSON 7"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/A1yDvFL4AKmSnaEau35v4pn7sZFk76v6IiXgI4kbP2I",
+        "self": "/company/13236560/filing-history/MzI5Mjk5NjA1MGFkaXF6a2N4"
+      },
+      "pages": 2,
+      "subcategory": "appointments",
+      "transaction_id": "MzI5Mjk5NjA1MGFkaXF6a2N4",
+      "type": "AP01"
+    },
+    {
+      "action_date": "2021-03-02",
+      "barcode": "X9ZFCB9C",
+      "category": "persons-with-significant-control",
+      "date": "2021-03-02",
+      "description": "cessation-of-a-person-with-significant-control",
+      "description_values": {
+        "cessation_date": "2021-03-02",
+        "psc_name": "PERSON 9"
+      },
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/_wRyRPVO1DE0WPofQr_10YQ77xYPFTMU0Ybskp55a1M",
+        "self": "/company/13236560/filing-history/MzI5Mjk5NTgyNmFkaXF6a2N4"
+      },
+      "pages": 1,
+      "subcategory": "termination",
+      "transaction_id": "MzI5Mjk5NTgyNmFkaXF6a2N4",
+      "type": "PSC07"
+    },
+    {
+      "associated_filings": [
+        {
+          "action_date": "2021-03-01",
+          "category": "capital",
+          "date": "2021-03-01",
+          "description": "statement-of-capital",
+          "description_values": {
+            "capital": [
+              {
+                "currency": "GBP",
+                "figure": "1"
+              }
+            ],
+            "date": "2021-03-01"
+          },
+          "type": "SH01"
+        }
+      ],
+      "barcode": "X9ZCIVDD",
+      "category": "incorporation",
+      "date": "2021-03-01",
+      "description": "incorporation-company",
+      "links": {
+        "document_metadata": "https://document-api.company-information.service.gov.uk/document/BirC45W7ApND5VTc7h2G7ly9J8Ji4-QM-Jok5GUrCrM",
+        "self": "/company/13236560/filing-history/MzI5Mjg2MDkzM2FkaXF6a2N4"
+      },
+      "pages": 30,
+      "transaction_id": "MzI5Mjg2MDkzM2FkaXF6a2N4",
+      "type": "NEWINC"
+    }
+  ],
+  "items_per_page": 100,
+  "start_index": 0,
+  "total_count": 20
+}
