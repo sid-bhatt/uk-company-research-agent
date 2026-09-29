@@ -27,6 +27,12 @@ DROP = {"date_of_birth", "address", "name_elements", "principal_office_address",
 ADDRESS_TEXT = {"old_address", "new_address"}  # AD01 description_values
 
 
+def is_person_name(key: str) -> bool:
+    """`name`, plus any `*_name` that isn't a company's: filing descriptions carry people's
+    names as `officer_name`, `psc_name`, … and new filing types may add more."""
+    return key == "name" or (key.endswith("_name") and "company" not in key)
+
+
 class Pseudonymiser:
     def __init__(self) -> None:
         self.names: dict[str, str] = {}
@@ -45,7 +51,7 @@ class Pseudonymiser:
         for k, v in value.items():
             if k in DROP:
                 continue
-            if k == "name" and isinstance(v, str):
+            if is_person_name(k) and isinstance(v, str):
                 out[k] = self.names.setdefault(v, f"PERSON {len(self.names) + 1}")
             elif k in ADDRESS_TEXT and isinstance(v, str):
                 out[k] = self._address(v)

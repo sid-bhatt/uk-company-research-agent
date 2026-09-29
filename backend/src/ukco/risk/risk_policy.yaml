@@ -1,0 +1,81 @@
+# KYB risk policy: thresholds, severities and points for every rule.
+#
+# ILLUSTRATIVE ONLY. A real compliance team sets these from its own risk appetite.
+# The values are deliberately in config, not code: policy changes shouldn't need a
+# deploy, and every report records the hash of the policy that produced it.
+
+version: 1
+
+# Points per severity. Risk score = sum of points over flags, capped at 100.
+points:
+  low: 5
+  medium: 15
+  high: 30
+
+rules:
+  overdue_accounts:
+    # Severity by days past the filing deadline.
+    severity_by_days_overdue:
+      - {min_days: 1, severity: medium}
+      - {min_days: 90, severity: high}
+
+  overdue_confirmation_statement:
+    severity_by_days_overdue:
+      - {min_days: 1, severity: low}
+      - {min_days: 60, severity: medium}
+
+  director_churn:
+    window_months: 12
+    # Director appointments + resignations in the window, excluding the initial board
+    # set up within `ignore_days_after_incorporation` of incorporation.
+    ignore_days_after_incorporation: 30
+    severity_by_changes:
+      - {min_changes: 3, severity: medium}
+      - {min_changes: 5, severity: high}
+
+  psc_changes:
+    window_months: 12
+    ignore_days_after_incorporation: 30
+    severity_by_changes:
+      - {min_changes: 1, severity: low}
+      - {min_changes: 3, severity: medium}
+
+  office_changes:
+    window_months: 24
+    severity_by_changes:
+      - {min_changes: 2, severity: low}
+      - {min_changes: 3, severity: medium}
+    # Live-only register markers (not dated, so not used when back-testing).
+    disputed_or_undeliverable_severity: high
+
+  new_company_high_risk_sic:
+    max_age_months: 12
+    severity: medium
+
+  officer_network:
+    # Per officer: companies they are/were on, excluding this one. "Dissolved" is often a
+    # benign voluntary strike-off, so it needs volume *and* a high share; insolvency
+    # statuses count on their own.
+    min_adverse_links: 5
+    min_adverse_share: 0.5
+    min_insolvency_links: 2
+    adverse_statuses: [dissolved, liquidation, administration, receivership, insolvency-proceedings, voluntary-arrangement, converted-closed]
+    insolvency_statuses: [liquidation, administration, receivership, insolvency-proceedings, voluntary-arrangement]
+    severity: medium
+    severity_if_insolvency_links: high
+
+# Higher-risk sectors for financial crime, loosely following the UK National Risk
+# Assessment of money laundering. SIC 2007 codes.
+high_risk_sic_codes:
+  "64999": Financial intermediation not elsewhere classified (incl. money service businesses)
+  "66120": Security and commodity contracts dealing
+  "66190": Activities auxiliary to financial services (incl. crypto-asset firms)
+  "92000": Gambling and betting activities
+  "45112": Sale of used cars and light motor vehicles (cash-intensive)
+  "46720": Wholesale of metals and metal ores
+  "47770": Retail sale of watches and jewellery
+  "68100": Buying and selling of own real estate
+  "68310": Real estate agencies
+  "82990": Other business support service activities n.e.c. (incl. company formation / TCSPs)
+  "74990": Non-trading company
+  "99999": Dormant company

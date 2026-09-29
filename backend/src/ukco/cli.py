@@ -260,5 +260,69 @@ def fetch(
     typer.echo(json.dumps(summary, indent=2))
 
 
+SEVERITY_COLOURS = {"high": "red", "medium": "yellow", "low": "cyan"}
+
+
+@app.command()
+def assess(
+    company_number: str,
+    as_of: Annotated[
+        str | None, typer.Option("--as-of", help="Back-test date YYYY-MM-DD (default: today).")
+    ] = None,
+    network: Annotated[bool, typer.Option(help="Check directors' other companies.")] = True,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print the full assessment JSON.")
+    ] = False,
+) -> None:
+    """Fetch a company and run the KYB rules: flags, citations and risk score."""
+    import datetime as dt
+
+    from ukco.db import get_engine
+    from ukco.ingest.company import fetch_bundle, persist_bundle
+    from ukco.risk import assess as run_assessment
+
+    async def go():
+        async with client_from_settings() as client:
+            return await fetch_bundle(client, company_number, network=network)
+
+    try:
+        bundle = asyncio.run(go())
+        with get_engine().begin() as conn:
+            stored = persist_bundle(conn, bundle)
+        result = run_assessment(
+            bundle, stored.evidence, as_of=dt.date.fromisoformat(as_of) if as_of else None
+        )
+    except (CompaniesHouseError, ValueError) as exc:
+        typer.secho(f"✗ {exc}", fg="red", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(result.model_dump_json(indent=2))
+        return
+    mode = "live" if result.live else "back-test"
+    typer.secho(
+        f"{result.company_name} ({result.company_number}): as of {result.as_of} [{mode}], "
+        f"policy v{result.policy_version} ({result.policy_sha256[:8]})",
+        bold=True,
+    )
+    typer.secho(f"Risk score: {result.risk_score}/100\n", bold=True)
+    for o in result.outcomes:
+        if o.status == "flagged":
+            for f in o.flags:
+                typer.secho(f"  ✗ {f.severity.upper():<6} {f.title} (+{f.points})",
+                            fg=SEVERITY_COLOURS[f.severity])  # fmt: skip
+                typer.echo(f"           {f.explanation}")
+                for c in f.evidence[:3]:
+                    typer.echo(f"           ↳ {c.url}  [snapshot {c.snapshot_id} {c.pointer}]")
+                if len(f.evidence) > 3:
+                    typer.echo(f"           ↳ … {len(f.evidence) - 3} more citation(s)")
+            if o.note:
+                typer.echo(f"           note: {o.note}")
+        elif o.status == "clear":
+            typer.secho(f"  ✓ {o.rule}: {o.note}", fg="green")
+        else:
+            typer.secho(f"  · {o.rule}: not assessed. {o.note}", dim=True)
+
+
 if __name__ == "__main__":
     app()

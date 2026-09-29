@@ -17,7 +17,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 |---|---|---|
 | 4 | Pivot docs (ADR-004, data model, API map). Client: PSCs, PSC statements, officer appointments, charges, insolvency, advanced search. Fixtures + tests. | ✅ |
 | 5 | Schema v2 migration: `officers` → `appointments` + `officers` (people), `pscs`, `psc_statements`, `source_snapshots`, stub companies, profile deadline fields. `ukco fetch <number>`: one company's full bundle + officer network (capped), every response snapshotted. | ✅ |
-| 6 | Rules engine with `as_of`: overdue accounts/confirmation statement (computed deadlines), director churn, PSC changes, office changes, new company + high-risk SIC, officer network. `risk_policy.yaml`. Unit tests per rule on real fixtures. | ☐ |
+| 6 | Rules engine with `as_of`: overdue accounts/confirmation statement (computed deadlines), director churn, PSC changes, office changes, new company + high-risk SIC, officer network. `risk_policy.yaml`. Unit tests per rule on real fixtures. | ✅ |
 
 ## Week 2: financials, report, API, evals v0
 | Day | Tasks | Done |
@@ -63,4 +63,4 @@ Candidates (pick one, measure against the week-6 eval baseline):
 | 7 | Domain | Buy before Day 16 (HTTPS on ALB) |
 | 8 | AWS budget | $50/month, alerts at 50/80/100% |
 | 9 | Airflow | Watchlist monitoring + snapshot refresh; local Docker, prod as scheduled ECS task |
-| 10 | Repo visibility | Private until v1, then public |
+| 10 | Repo visibility | Private until v1, then public. **Before going public:** rewrite git history to purge real names from early KYB fixtures (commits in #4/#5; fixed in Day 6) |

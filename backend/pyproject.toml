@@ -11,6 +11,7 @@ dependencies = [
     "httpx>=0.28.1",
     "sqlalchemy>=2.0",
     "alembic>=1.20.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -22,6 +23,7 @@ dev = [
     "ruff>=0.8",
     "pyright>=1.1.390",
     "pre-commit>=4.0",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [build-system]

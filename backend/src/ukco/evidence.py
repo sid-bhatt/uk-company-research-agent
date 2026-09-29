@@ -32,6 +32,10 @@ class Citation(BaseModel):
     path: str  # API path, e.g. /company/13237895/officers
     url: str  # where a human can check it on the Companies House website
 
+    def at(self, sub_pointer: str) -> "Citation":
+        """A narrower citation inside this one, e.g. profile.at("/accounts")."""
+        return self.model_copy(update={"pointer": self.pointer + sub_pointer})
+
 
 @dataclass(frozen=True)
 class StoredResponse:
