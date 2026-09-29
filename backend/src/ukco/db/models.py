@@ -1,14 +1,14 @@
 """Database schema.
 
-Idempotency lives in the keys: every table that ingestion writes to has a natural
-unique key taken from Companies House, and writes are upserts on that key. Re-running
-ingestion for the same company updates rows in place instead of duplicating them.
+Two layers (docs/data-model.md):
+- **Register data**, upserted on Companies House natural keys so re-fetching a company
+  updates rows in place, and rows are only rewritten when a tracked column changed.
+- **Evidence**: every API response behind a fetch is kept in `source_snapshots`; a run's
+  `manifest` lists them, so any report can be replayed from exactly what it saw.
 
-    companies  ─┬─< officers        (appointment_id)
-                └─< filings         (transaction_id) ──< documents (document_id) ──< chunks
-
-The embedding column on `chunks` is added on Day 5, once the embedding model
-(and so the vector dimension) is chosen in ADR-002.
+    companies ─┬─< appointments >── officers        (person ↔ company edges: the network)
+               ├─< pscs, psc_statements
+               └─< filings ──< documents ──< chunks
 """
 
 import datetime as dt
@@ -48,10 +48,13 @@ def _updated_at() -> Mapped[dt.datetime]:
 
 
 class Company(Base):
+    """A full profile, or a **stub** (profile_fetched_at is null) for a company only
+    seen through an officer's appointment list: number, name and status."""
+
     __tablename__ = "companies"
 
     company_number: Mapped[str] = mapped_column(String(8), primary_key=True)
-    name: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(Text)
     type: Mapped[str | None] = mapped_column(Text)
     jurisdiction: Mapped[str | None] = mapped_column(Text)
@@ -60,35 +63,126 @@ class Company(Base):
     registered_office: Mapped[str | None] = mapped_column(Text)
     sic_codes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     has_insolvency_history: Mapped[bool | None] = mapped_column(Boolean)
-    raw: Mapped[dict[str, Any]]
-    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    has_been_liquidated: Mapped[bool | None] = mapped_column(Boolean)
+    registered_office_is_in_dispute: Mapped[bool | None] = mapped_column(Boolean)
+    undeliverable_registered_office_address: Mapped[bool | None] = mapped_column(Boolean)
+    accounts_next_due: Mapped[dt.date | None] = mapped_column(Date)
+    accounts_overdue: Mapped[bool | None] = mapped_column(Boolean)
+    last_accounts_made_up_to: Mapped[dt.date | None] = mapped_column(Date)
+    confirmation_statement_next_due: Mapped[dt.date | None] = mapped_column(Date)
+    confirmation_statement_overdue: Mapped[bool | None] = mapped_column(Boolean)
+    raw: Mapped[dict[str, Any] | None]
+    profile_fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = _created_at()
     updated_at: Mapped[dt.datetime] = _updated_at()
 
 
 class Officer(Base):
+    """A person (or corporate officer), identified across companies by `officer_id`."""
+
     __tablename__ = "officers"
+
+    officer_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str | None] = mapped_column(Text)
+    is_corporate: Mapped[bool | None] = mapped_column(Boolean)
+    total_appointments: Mapped[int | None] = mapped_column(Integer)
+    appointments_truncated: Mapped[bool | None] = mapped_column(Boolean)
+    appointments_fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _created_at()
+    updated_at: Mapped[dt.datetime] = _updated_at()
+
+
+class Appointment(Base):
+    """Person ↔ company edge. Seen from the company's officer list (has appointment_id)
+    and/or from the officer's appointment list (the network); both land on one row."""
+
+    __tablename__ = "appointments"
     __table_args__ = (
-        Index("ix_officers_company_number", "company_number"),
-        # Person id shared across companies: powers "who sits on both boards?"
-        Index("ix_officers_officer_id", "officer_id"),
+        UniqueConstraint(
+            "company_number",
+            "officer_id",
+            "role",
+            "appointed_on",
+            name="uq_appointments_edge",
+            postgresql_nulls_not_distinct=True,  # pre-1992 appointments have no date
+        ),
+        Index("ix_appointments_officer_id", "officer_id"),
     )
 
-    appointment_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     company_number: Mapped[str] = mapped_column(
         ForeignKey("companies.company_number", ondelete="CASCADE")
     )
-    officer_id: Mapped[str | None] = mapped_column(Text)
-    name: Mapped[str] = mapped_column(Text)
+    officer_id: Mapped[str] = mapped_column(ForeignKey("officers.officer_id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(Text)
     appointed_on: Mapped[dt.date | None] = mapped_column(Date)
     resigned_on: Mapped[dt.date | None] = mapped_column(Date)
+    appointment_id: Mapped[str | None] = mapped_column(Text, unique=True)
+    name: Mapped[str | None] = mapped_column(Text)
     nationality: Mapped[str | None] = mapped_column(Text)
     occupation: Mapped[str | None] = mapped_column(Text)
     country_of_residence: Mapped[str | None] = mapped_column(Text)
-    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = _created_at()
     updated_at: Mapped[dt.datetime] = _updated_at()
+
+
+class Psc(Base):
+    __tablename__ = "pscs"
+    __table_args__ = (UniqueConstraint("company_number", "psc_id", name="uq_pscs_company_psc"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_number: Mapped[str] = mapped_column(
+        ForeignKey("companies.company_number", ondelete="CASCADE")
+    )
+    psc_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
+    natures_of_control: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
+    notified_on: Mapped[dt.date | None] = mapped_column(Date)
+    ceased_on: Mapped[dt.date | None] = mapped_column(Date)
+    nationality: Mapped[str | None] = mapped_column(Text)
+    country_of_residence: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created_at()
+    updated_at: Mapped[dt.datetime] = _updated_at()
+
+
+class PscStatement(Base):
+    __tablename__ = "psc_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_number",
+            "statement",
+            "notified_on",
+            name="uq_psc_statements",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_number: Mapped[str] = mapped_column(
+        ForeignKey("companies.company_number", ondelete="CASCADE")
+    )
+    statement: Mapped[str] = mapped_column(Text)
+    notified_on: Mapped[dt.date | None] = mapped_column(Date)
+    ceased_on: Mapped[dt.date | None] = mapped_column(Date)
+    created_at: Mapped[dt.datetime] = _created_at()
+    updated_at: Mapped[dt.datetime] = _updated_at()
+
+
+class SourceSnapshot(Base):
+    """One API response, stored verbatim. Identical responses share a row."""
+
+    __tablename__ = "source_snapshots"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    content_key: Mapped[str] = mapped_column(String(64), unique=True)  # sha256(path, params, body)
+    path: Mapped[str] = mapped_column(Text)
+    params: Mapped[dict[str, Any]] = mapped_column(server_default="{}")
+    body: Mapped[Any] = mapped_column(JSONB)
+    first_seen_at: Mapped[dt.datetime] = _created_at()
+    last_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Filing(Base):
@@ -184,6 +278,8 @@ class IngestionRun(Base):
     params: Mapped[dict[str, Any]] = mapped_column(server_default="{}")
     status: Mapped[str] = mapped_column(Text, server_default="running")
     stats: Mapped[dict[str, Any]] = mapped_column(server_default="{}")
+    # {company_number: [snapshot ids]}: replaying these reproduces the run's inputs.
+    manifest: Mapped[dict[str, Any]] = mapped_column(server_default="{}")
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[dt.datetime] = _created_at()
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

@@ -48,3 +48,9 @@ erDiagram
 {"kind": "document", "document_id": "abc…", "page": 7, "element": "ix:nonFraction#NetAssetsLiabilities"}
 ```
 A validator rejects any report whose citations don't resolve to a stored snapshot/document.
+
+`ukco.evidence.EvidenceIndex` maps facts to citations when a bundle is persisted, e.g.
+`("filing", n, transaction_id)`, `("appointment", n, officer_id, role, appointed_on)`,
+`("psc", n, psc_id)`, `("network", officer_id, linked_n, role, appointed_on)`, and
+`("register", path)` for absences such as "no insolvency on file". Each fetch is an
+`ingestion_runs` row whose `manifest` lists its snapshot ids, so a report can be replayed.

@@ -205,10 +205,10 @@ def ingest_metadata(
     limit: Annotated[int | None, typer.Option(help="Only the first N seed companies.")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Fetch profiles, officers and filing history into Postgres (safe to re-run)."""
+    """Bulk: profiles, officers, PSCs, filings for many companies (no network check)."""
     from ukco.db import get_engine
     from ukco.ingest import load_seed
-    from ukco.ingest.metadata import ingest_companies, summarise
+    from ukco.ingest.company import ingest_companies, summarise
 
     logging.basicConfig(
         level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s %(message)s"
@@ -227,6 +227,37 @@ def ingest_metadata(
     for r in failed:
         typer.secho(f"✗ {r.company_number}: {r.error}", fg="red")
     raise typer.Exit(code=1 if failed else 0)
+
+
+@app.command()
+def fetch(
+    company_number: str,
+    network: Annotated[bool, typer.Option(help="Also fetch officers' other appointments.")] = True,
+) -> None:
+    """Fetch one company's full KYB bundle (+ director network) with stored evidence."""
+    from ukco.db import get_engine
+    from ukco.ingest.company import ingest_companies, summarise
+
+    async def go():
+        async with client_from_settings() as client:
+            return await ingest_companies(
+                client, get_engine(), [company_number], network=network, trigger="fetch"
+            )
+
+    try:
+        run_id, results = asyncio.run(go())
+    except ValueError as exc:  # invalid company number
+        typer.secho(f"✗ {exc}", fg="red", err=True)
+        raise typer.Exit(code=1) from exc
+    result = results[0]
+    if result.error:
+        typer.secho(f"✗ {result.error}", fg="red", err=True)
+        raise typer.Exit(code=1)
+    summary = summarise(results)
+    for key in ("companies_ok", "companies_failed"):
+        summary.pop(key)
+    typer.echo(f"Run {run_id}: {len(result.evidence)} citable facts")
+    typer.echo(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
