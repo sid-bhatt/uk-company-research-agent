@@ -58,6 +58,12 @@ class CompanySearchResult(_Model):
 # --- Company profile ----------------------------------------------------------
 
 
+class PreviousName(_Model):
+    name: str
+    ceased_on: dt.date | None = None
+    effective_from: dt.date | None = None
+
+
 class CompanyProfile(_Model):
     company_number: str
     company_name: str
@@ -70,6 +76,7 @@ class CompanyProfile(_Model):
     sic_codes: list[str] = []
     has_charges: bool | None = None
     has_insolvency_history: bool | None = None
+    previous_company_names: list[PreviousName] = []
 
 
 # --- Officers -----------------------------------------------------------------
@@ -80,6 +87,7 @@ class OfficerAppointmentLinks(_Model):
 
 
 class OfficerLinks(_Model):
+    self: str | None = None  # /company/{number}/appointments/{appointment_id}
     officer: OfficerAppointmentLinks | None = None
 
 
@@ -115,6 +123,15 @@ class Officer(_Model):
         parts = link.strip("/").split("/")
         return parts[1] if len(parts) >= 3 and parts[0] == "officers" else None
 
+    @property
+    def appointment_id(self) -> str | None:
+        """Unique id of this appointment (one person, one role, one company)."""
+        link = self.links.self if self.links else None
+        if not link:
+            return None
+        parts = link.strip("/").split("/")
+        return parts[3] if len(parts) == 4 and parts[2] == "appointments" else None
+
 
 class OfficerList(_Model):
     items: list[Officer] = []
@@ -142,6 +159,7 @@ class FilingHistoryItem(_Model):
     description_values: dict[str, object] = {}
     pages: int | None = None
     barcode: str | None = None
+    paper_filed: bool | None = None  # scanned paper filing → PDF likely has no text layer
     links: FilingLinks | None = None
 
     @property

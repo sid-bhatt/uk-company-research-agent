@@ -1,4 +1,4 @@
-.PHONY: setup up down doctor test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
@@ -10,6 +10,12 @@ up:               ## Start local Postgres + pgvector
 
 down:
 	docker compose down
+
+migrate:          ## Apply database migrations
+	cd backend && uv run ukco db upgrade
+
+ingest-metadata:  ## Fetch profiles, officers, filings for all seed companies (safe to re-run)
+	cd backend && uv run ukco ingest metadata
 
 doctor:           ## Check local setup
 	cd backend && uv run ukco doctor

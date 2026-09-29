@@ -1,17 +1,40 @@
 """Command-line entry point: `uv run ukco --help`."""
 
 import asyncio
+import json
+import logging
+from pathlib import Path
+from typing import Annotated
 
 import psycopg
 import typer
 
 from ukco import __version__
-from ukco.companies_house import CompaniesHouseError, client_from_settings
+from ukco.companies_house import (
+    AuthError,
+    CompaniesHouseClient,
+    CompaniesHouseError,
+    client_from_settings,
+)
 from ukco.config import get_settings
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 ch = typer.Typer(no_args_is_help=True, help="Query the Companies House API directly.")
+db = typer.Typer(no_args_is_help=True, help="Database schema management.")
+ingest = typer.Typer(no_args_is_help=True, help="Run ingestion pipeline steps.")
 app.add_typer(ch, name="ch")
+app.add_typer(db, name="db")
+app.add_typer(ingest, name="ingest")
+
+ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
+
+
+def _alembic_config():
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.attributes["configure_logger"] = False
+    return cfg
 
 
 @app.command()
@@ -40,13 +63,53 @@ def doctor() -> None:
         typer.secho(f"✗ Postgres unreachable: {exc}".strip(), fg="red")
         ok = False
 
-    if settings.companies_house_api_key:
-        typer.secho("✓ COMPANIES_HOUSE_API_KEY set", fg="green")
-    else:
-        typer.secho("✗ COMPANIES_HOUSE_API_KEY not set (see .env.example)", fg="yellow")
-        ok = False
-
+    ok = _check_schema() and ok
+    ok = _check_api_key(settings.companies_house_api_key) and ok
     raise typer.Exit(code=0 if ok else 1)
+
+
+def _check_schema() -> bool:
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from sqlalchemy.exc import OperationalError
+
+    from ukco.db import get_engine
+
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+    try:
+        with get_engine().connect() as conn:
+            current = MigrationContext.configure(conn).get_current_revision()
+    except OperationalError:
+        return False  # already reported as unreachable
+    if current == head:
+        typer.secho(f"✓ Database schema up to date (revision {head})", fg="green")
+        return True
+    typer.secho(
+        f"✗ Database schema at {current}, latest is {head}: run `ukco db upgrade`", fg="red"
+    )
+    return False
+
+
+def _check_api_key(key) -> bool:
+    if not key or not key.get_secret_value().strip():
+        typer.secho("✗ COMPANIES_HOUSE_API_KEY not set (see .env.example)", fg="red")
+        return False
+
+    async def probe() -> None:
+        # Uncached on purpose: a cached response would hide a bad key.
+        async with CompaniesHouseClient(key.get_secret_value().strip()) as client:
+            await client.get_company("00502851")
+
+    try:
+        asyncio.run(probe())
+    except AuthError as exc:
+        typer.secho(f"✗ {exc} (test/sandbox keys don't work on the live API)", fg="red")
+        return False
+    except CompaniesHouseError as exc:
+        typer.secho(f"✗ Companies House API unreachable: {exc}", fg="red")
+        return False
+    typer.secho("✓ Companies House API key accepted by the live API", fg="green")
+    return True
 
 
 def _run(coro) -> None:
@@ -87,7 +150,7 @@ def ch_company(company_number: str) -> None:
 
 
 @ch.command("officers")
-def ch_officers(company_number: str, all_: bool = typer.Option(False, "--all")) -> None:
+def ch_officers(company_number: str, all_: Annotated[bool, typer.Option("--all")] = False) -> None:
     """List officers (current only unless --all)."""
 
     async def go() -> None:
@@ -114,6 +177,56 @@ def ch_filings(company_number: str, category: str | None = None, limit: int = 20
             typer.echo(f"{f.date}  {f.type:<8} {f.category:<22} doc={doc}  {f.description}")
 
     _run(go())
+
+
+@db.command("upgrade")
+def db_upgrade(revision: str = "head") -> None:
+    """Apply migrations (default: to latest)."""
+    from alembic import command
+
+    command.upgrade(_alembic_config(), revision)
+    typer.secho(f"✓ Database upgraded to {revision}", fg="green")
+
+
+@db.command("current")
+def db_current() -> None:
+    """Show the database's migration revision."""
+    from alembic import command
+
+    command.current(_alembic_config())
+
+
+@ingest.command("metadata")
+def ingest_metadata(
+    company: Annotated[
+        list[str] | None,
+        typer.Option("--company", "-c", help="Company number(s). Default: whole seed list."),
+    ] = None,
+    limit: Annotated[int | None, typer.Option(help="Only the first N seed companies.")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Fetch profiles, officers and filing history into Postgres (safe to re-run)."""
+    from ukco.db import get_engine
+    from ukco.ingest import load_seed
+    from ukco.ingest.metadata import ingest_companies, summarise
+
+    logging.basicConfig(
+        level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s %(message)s"
+    )
+    numbers = company or [c.company_number for c in load_seed()][:limit]
+    typer.echo(f"Ingesting metadata for {len(numbers)} companies…")
+
+    async def go():
+        async with client_from_settings() as client:
+            return await ingest_companies(client, get_engine(), numbers)
+
+    run_id, results = asyncio.run(go())
+    typer.echo(f"Run {run_id}:")
+    typer.echo(json.dumps(summarise(results), indent=2))
+    failed = [r for r in results if r.error]
+    for r in failed:
+        typer.secho(f"✗ {r.company_number}: {r.error}", fg="red")
+    raise typer.Exit(code=1 if failed else 0)
 
 
 if __name__ == "__main__":

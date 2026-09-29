@@ -1,6 +1,7 @@
 """Companies House client tests. No network: every response comes from a MockTransport."""
 
 import base64
+import datetime as dt
 from collections.abc import Callable
 from pathlib import Path
 
@@ -174,6 +175,27 @@ async def test_iter_filing_history_walks_all_pages() -> None:
 
     assert len(items) == 150
     assert items[-1].transaction_id == "T149"
+
+
+async def test_iter_filing_history_stops_paging_at_since() -> None:
+    requested: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        start = int(request.url.params["start_index"])
+        requested.append(start)
+        # 1000 filings, newest first, one per day going back from 2026-09-01
+        items = [
+            {"transaction_id": f"T{i}", "date": str(dt.date(2026, 9, 1) - dt.timedelta(days=i))}
+            for i in range(start, start + 100)
+        ]
+        return httpx.Response(200, json={"items": items, "total_count": 1000})
+
+    async with make_client(handler) as client:
+        items = [i async for i in client.iter_filing_history("00502851", since=dt.date(2026, 5, 1))]
+
+    assert all(i.date and i.date >= dt.date(2026, 5, 1) for i in items)
+    assert len(items) == 124  # 2026-05-01 .. 2026-09-01 inclusive
+    assert requested == [0, 100]  # stopped without fetching the other 8 pages
 
 
 # --- Errors and retries ------------------------------------------------------------

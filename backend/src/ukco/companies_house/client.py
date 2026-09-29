@@ -9,6 +9,7 @@ Responsibilities, in order, for every call:
 """
 
 import asyncio
+import datetime as dt
 import random
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
@@ -143,9 +144,12 @@ class CompaniesHouseClient:
         return CompanySearchResult.model_validate(data)
 
     async def get_company(self, company_number: str) -> CompanyProfile:
+        return CompanyProfile.model_validate(await self.get_company_raw(company_number))
+
+    async def get_company_raw(self, company_number: str) -> dict[str, Any]:
+        """Unparsed profile JSON, for storing exactly what Companies House returned."""
         number = normalise_company_number(company_number)
-        data = await self._get_json(f"{API_BASE_URL}/company/{number}", ttl=DAY)
-        return CompanyProfile.model_validate(data)
+        return await self._get_json(f"{API_BASE_URL}/company/{number}", ttl=DAY)
 
     async def list_officers(
         self, company_number: str, *, start_index: int = 0, items_per_page: int = 100
@@ -186,14 +190,22 @@ class CompaniesHouseClient:
         return FilingHistoryList.model_validate(data)
 
     async def iter_filing_history(
-        self, company_number: str, *, category: str | None = None
+        self,
+        company_number: str,
+        *,
+        category: str | None = None,
+        since: dt.date | None = None,
     ) -> AsyncIterator[FilingHistoryItem]:
+        """Walk filing history newest-first. With `since`, stop paging at older filings:
+        big old companies have thousands of filings, and each page costs rate limit."""
         start = 0
         while True:
             page = await self.list_filing_history(
                 company_number, category=category, start_index=start
             )
             for item in page.items:
+                if since and item.date and item.date < since:
+                    return
                 yield item
             start += len(page.items)
             if not page.items or start >= page.total_count:

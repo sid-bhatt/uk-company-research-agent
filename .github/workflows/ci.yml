@@ -42,8 +42,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
-      - name: Enable pgvector
-        run: psql "$DATABASE_URL" -f ../db/init/001_extensions.sql
+      - name: Apply migrations
+        run: uv run ukco db upgrade
       - run: uv run pytest -v
 
   secrets-scan:

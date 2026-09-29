@@ -7,7 +7,7 @@ Companies House records, with a citation for every claim.
 > "What was Greggs' turnover in its last three annual accounts? Cite the pages."
 > "Which directors sit on the boards of both company X and company Y?"
 
-**Status:** 🚧 Week 1 of 3 toward a deployed v1. See [docs/PLAN.md](docs/PLAN.md).
+**Status:** 🚧 Week 1 of 3 toward a deployed v1 (Day 3 done). See [docs/PLAN.md](docs/PLAN.md).
 
 ## What it does
 
@@ -45,9 +45,11 @@ Prerequisites: Docker, [uv](https://docs.astral.sh/uv/), a free
 [Companies House API key](https://developer.company-information.service.gov.uk/).
 
 ```bash
-make setup     # install deps + git hooks, create .env
-make up        # start Postgres + pgvector
-make doctor    # verify everything is wired up
+make setup            # install deps + git hooks, create .env
+make up               # start Postgres + pgvector
+make migrate          # create the schema
+make doctor           # verify DB, schema and a live API call
+make ingest-metadata  # companies, officers, filing history for the seed list
 make test
 ```
 
