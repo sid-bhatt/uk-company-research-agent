@@ -1,6 +1,6 @@
 # ADR-003: OCR is required for filing documents
 
-- **Status:** Accepted
+- **Status:** Accepted, **amended by [ADR-004](0004-pivot-to-kyb-due-diligence.md)**: small companies file iXBRL, so OCR is now the fallback for PDF-only (mostly large) filers, limited to balance-sheet pages, post-v1.
 - **Date:** 2026-09-28
 - **Supersedes:** "skip scanned PDFs in v1" (PLAN decision #8)
 

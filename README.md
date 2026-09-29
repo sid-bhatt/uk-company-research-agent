@@ -1,36 +1,41 @@
-# UK Company Research Agent
+# KYB Due-Diligence Agent (UK)
 
-Ask questions about UK companies in plain English and get answers backed by official
-Companies House records, with a citation for every claim.
+Enter a UK company number and get a **structured, cited risk report** that a compliance
+analyst reviews and approves: the Know-Your-Business check fintechs run before onboarding
+a business customer.
 
-> "Who are the current directors of Tesco PLC, and when were they appointed?"
-> "What was Greggs' turnover in its last three annual accounts? Cite the pages."
-> "Which directors sit on the boards of both company X and company Y?"
+**Status:** 🚧 Week 1 of 3 toward a deployed v1. See [docs/PLAN.md](docs/PLAN.md).
 
-**Status:** 🚧 Week 1 of 3 toward a deployed v1 (Day 3 done). See [docs/PLAN.md](docs/PLAN.md).
+## What the report contains
+1. **Snapshot:** status, age, SIC codes, registered-office history, officers, people with significant control.
+2. **Red flags**, each with severity, a one-line explanation, and a citation to the exact source
+   (API record or filing page):
+   overdue accounts / confirmation statement · director churn · officers linked to many
+   failed companies · recent ownership (PSC) changes · frequent office moves ·
+   very new company in a high-risk sector · financial deterioration in filed accounts.
+3. **Risk score (0–100)** with every contributing reason.
+4. **Review:** the analyst confirms or dismisses each flag; every decision goes into an audit trail.
 
-## What it does
+**Design principle:** deterministic rules for everything computable from register data; the
+LLM only where it adds value (explanations, summaries, reading PDF-only accounts).
+Why and how: [ADR-004](docs/adr/0004-pivot-to-kyb-due-diligence.md).
 
-Every UK company must file public records with **Companies House**: who runs it,
-who owns it, and yearly accounts, often as long PDFs. The data is free but slow to
-dig through. This project:
+**Evaluation:** rules are checked against hand-labelled companies, and the risk score is
+back-tested *as of* a past date against what actually happened (compulsory strike-off,
+liquidation, administration) in the following 18 months.
 
-1. **Collects** company records and filing documents from the Companies House API on a schedule.
-2. **Reads and indexes** the PDFs so the relevant paragraph can be found in milliseconds.
-3. **Answers questions** with an AI agent that decides which lookups to run (search a company,
-   list its officers, fetch its filings, search inside documents) and writes an answer.
-4. **Cites every claim** with a link to the exact filing and page, so a person can check it.
-5. **Measures its own accuracy** against a set of ~100 questions with known answers, automatically on every code change.
+> Demo only, not financial or compliance advice. Uses public Companies House data.
 
 ## Architecture
 
-_Diagram lands in week 3._ Planned components:
+_Diagram lands in week 3._ Data model: [docs/data-model.md](docs/data-model.md). API usage and rate budget: [docs/companies-house-api.md](docs/companies-house-api.md).
 
 | Layer | Tech |
 |---|---|
-| Ingestion pipeline | Python package, orchestrated by Airflow (Docker) |
+| Ingestion + monitoring | Python package; Airflow re-checks watchlisted companies nightly |
 | Storage + search | Postgres + pgvector (semantic) + full-text search |
-| Agent | LLM tool calling; same tools exposed as an MCP server |
+| Risk engine | Deterministic rules + versioned risk policy; LLM for explanations (structured output) |
+| Agent | Analyst follow-up chat; tools also exposed as an MCP server |
 | API | FastAPI, server-sent events for streaming |
 | Frontend | Next.js / TypeScript, GitHub sign-in |
 | Evals | Golden question set, run in GitHub Actions |
