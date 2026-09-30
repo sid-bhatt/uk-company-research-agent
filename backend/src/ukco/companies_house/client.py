@@ -303,6 +303,8 @@ class CompaniesHouseClient:
         *,
         incorporated_from: dt.date | None = None,
         incorporated_to: dt.date | None = None,
+        dissolved_from: dt.date | None = None,
+        dissolved_to: dt.date | None = None,
         company_status: Sequence[str] = (),
         company_type: Sequence[str] = (),
         sic_codes: Sequence[str] = (),
@@ -315,6 +317,10 @@ class CompaniesHouseClient:
             params["incorporated_from"] = incorporated_from.isoformat()
         if incorporated_to:
             params["incorporated_to"] = incorporated_to.isoformat()
+        if dissolved_from:
+            params["dissolved_from"] = dissolved_from.isoformat()
+        if dissolved_to:
+            params["dissolved_to"] = dissolved_to.isoformat()
         for name, values in (
             ("company_status", company_status),
             ("company_type", company_type),
@@ -322,7 +328,10 @@ class CompaniesHouseClient:
         ):
             if values:
                 params[name] = ",".join(values)
-        data = await self._get_json(f"{API_BASE_URL}/advanced-search/companies", params, ttl=HOUR)
+        # A search with no matches answers 404, not an empty list.
+        data = await self._get_json_or_empty(
+            f"{API_BASE_URL}/advanced-search/companies", params, ttl=HOUR
+        )
         return AdvancedSearchResult.model_validate(data)
 
     async def get_document_metadata(self, document_id: str) -> DocumentMetadata:

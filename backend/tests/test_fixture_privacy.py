@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from scripts.record_kyb_fixtures import ADDRESS_TEXT, is_person_name
 from tests.conftest import FIXTURES
+from ukco.privacy import is_address_text, is_person_name
 
 KYB_FIXTURES = sorted((FIXTURES / "companies_house" / "kyb").glob("*.json"))
 PSEUDONYM = re.compile(r"^(PERSON|ADDRESS) \d+$")
@@ -33,7 +33,28 @@ def test_no_personal_data(fixture) -> None:
     for path, key, value in walk(json.loads(fixture.read_text())):
         where = f"{fixture.name}:{path}/{key}"
         assert key != "date_of_birth", f"birth date at {where}"
-        if isinstance(value, str) and (is_person_name(key) or key in ADDRESS_TEXT):
+        if isinstance(value, str) and (is_person_name(key) or is_address_text(key)):
             assert PSEUDONYM.match(value), f"unpseudonymised {key}={value!r} at {where}"
         if key == "registered_office_address" and isinstance(value, dict):
             assert set(value) <= {"address_line_1", "country"}, f"address detail at {where}"
+
+
+POSTCODE = re.compile(r"\b[A-Z]{1,2}[0-9][0-9A-Z]? ?[0-9][A-Z]{2}\b")
+SNAPSHOTS = sorted((FIXTURES.parents[2] / "evals" / "data").glob("*/snapshot.jsonl.gz"))
+
+
+@pytest.mark.parametrize("snapshot", SNAPSHOTS, ids=lambda p: p.parent.name)
+def test_eval_snapshots_have_no_personal_data(snapshot) -> None:
+    from ukco.evals.frozen import read_snapshot
+
+    for company in read_snapshot(snapshot):
+        for response in company.responses:
+            for path, key, value in walk(response["body"]):
+                where = f"{company.company_number}{response['path']}{path}/{key}"
+                assert key not in ("date_of_birth", "particulars"), where
+                if not isinstance(value, str):
+                    continue
+                if is_person_name(key) or is_address_text(key):
+                    assert PSEUDONYM.match(value), f"unpseudonymised {where}"
+                elif key != "document_metadata":  # document ids can look like postcodes
+                    assert not POSTCODE.search(value), f"postcode-like text at {where}"

@@ -198,3 +198,12 @@ async def test_observer_sees_every_response_including_cache_hits_and_absences(
     paths = [p for p, _ in seen]
     assert paths == [f"/company/{ACTIVE}", f"/company/{ACTIVE}", f"/company/{ACTIVE}/insolvency"]
     assert seen[2][1] == {}
+
+
+async def test_advanced_search_with_no_matches_is_empty() -> None:
+    client = CompaniesHouseClient(
+        "k", transport=httpx.MockTransport(lambda r: httpx.Response(404, json={}))
+    )
+    async with client:
+        result = await client.advanced_search(incorporated_from=dt.date(2021, 3, 1), size=10)
+    assert result.items == [] and result.hits == 0

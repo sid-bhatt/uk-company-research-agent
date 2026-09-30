@@ -479,3 +479,20 @@ def test_policy_is_strict_and_hashed(tmp_path) -> None:
     bad.write_text(DEFAULT_POLICY.read_text() + "\nunexpected_key: 1\n")
     with pytest.raises(ValueError):
         load_policy(bad)
+
+
+async def test_back_test_bundle_uses_the_accounts_filed_by_as_of() -> None:
+    """Regression: 'latest two filings' must mean as of the back-test date, not today,
+    or healthy companies that kept filing lose their financial history in back-tests."""
+    from ukco.ingest.company import fetch_accounts
+
+    ch = FakeCompaniesHouse()
+    for doc_id in ch.accounts_document_ids(ACTIVE):
+        ch.documents[doc_id] = None  # metadata only; content isn't needed here
+    async with ch.client() as client:
+        bundle = await fetch_bundle(client, ACTIVE, network=False, financials=False, today=TODAY)
+        today_view = await fetch_accounts(client, bundle.filings)
+        back_test = await fetch_accounts(client, bundle.filings, as_of=dt.date(2024, 1, 1))
+
+    assert [str(d.filed_on) for d in today_view] == ["2025-04-15", "2024-04-30"]
+    assert [str(d.filed_on) for d in back_test] == ["2023-10-01", "2022-11-20"]

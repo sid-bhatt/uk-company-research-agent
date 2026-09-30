@@ -75,4 +75,16 @@ make api                                     # → http://localhost:8000/docs
 
 ## Eval results
 
-_Coming in weeks 4–6._
+Scored **as of 30 Sep 2024** using only what was known then; outcome = compulsory strike-off
+or insolvency in the next 18 months. 60 real companies, frozen snapshot, run on every PR.
+Method and caveats: [evals/README.md](evals/README.md).
+
+| Metric | AUC [95% CI] |
+|---|---|
+| Risk score vs adverse outcome | **0.68** [0.55, 0.79] |
+| …without filing-deadline flags | 0.61 [0.49, 0.72] |
+| …insolvency vs survived only | 0.63 [0.44, 0.81] |
+
+Baseline takeaway: a weak but real signal. The v1 rules catch distress that is already
+visible (net liabilities, office churn) more than distress that is coming. That's the
+target for the next iteration, measured against this baseline.

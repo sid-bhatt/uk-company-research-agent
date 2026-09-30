@@ -117,13 +117,23 @@ class CompanyBundle:
 
 
 async def fetch_accounts(
-    client: CompaniesHouseClient, filings: Sequence[FilingHistoryItem]
+    client: CompaniesHouseClient,
+    filings: Sequence[FilingHistoryItem],
+    *,
+    as_of: dt.date | None = None,
 ) -> list[AccountsDocument]:
-    """The latest MAX_ACCOUNTS_DOCUMENTS sets of accounts. iXBRL is downloaded and parsed
-    (each filing also carries the prior year's comparatives); PDF-only accounts are
-    recorded but not downloaded (OCR fallback is post-v1, ADR-003)."""
+    """The latest MAX_ACCOUNTS_DOCUMENTS sets of accounts filed by `as_of` (default: now).
+    iXBRL is downloaded and parsed (each filing also carries the prior year's
+    comparatives); PDF-only accounts are recorded but not downloaded (OCR is post-v1).
+
+    `as_of` matters for back-tests: "the latest two filings" as of today would hide a
+    company's accounts at a past date behind filings made since."""
     candidates = sorted(
-        (f for f in filings if f.type == "AA" and f.document_id and f.date),
+        (
+            f
+            for f in filings
+            if f.type == "AA" and f.document_id and f.date and (not as_of or f.date <= as_of)
+        ),
         key=lambda f: f.date or dt.date.min,
         reverse=True,
     )[:MAX_ACCOUNTS_DOCUMENTS]
@@ -174,9 +184,11 @@ async def fetch_bundle(
     *,
     network: bool = True,
     financials: bool = True,
+    accounts_as_of: dt.date | None = None,
     today: dt.date | None = None,
 ) -> CompanyBundle:
-    """Every register a KYB report needs, plus each response verbatim for evidence."""
+    """Every register a KYB report needs, plus each response verbatim for evidence.
+    Pass `accounts_as_of` for back-tests (see `fetch_accounts`)."""
     today = today or dt.date.today()
     responses: list[RawResponse] = []
     previous_observer = client.on_json
@@ -222,7 +234,7 @@ async def fetch_bundle(
                 except CompaniesHouseError as exc:  # one officer failing isn't fatal
                     bundle.network_errors[officer_id] = str(exc)
         if financials:
-            bundle.accounts = await fetch_accounts(client, filings)
+            bundle.accounts = await fetch_accounts(client, filings, as_of=accounts_as_of)
         bundle.responses = responses
         return bundle
     finally:

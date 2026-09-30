@@ -46,7 +46,7 @@ async def generate_report(
             on_stage(name)
 
     stage("fetching")
-    bundle = await fetch_bundle(client, company_number, network=network)
+    bundle = await fetch_bundle(client, company_number, network=network, accounts_as_of=as_of)
     stage("storing_evidence")
     with engine.begin() as conn:
         stored = persist_bundle(conn, bundle)

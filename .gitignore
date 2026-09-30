@@ -28,6 +28,7 @@ crash.log
 
 # Local data (downloaded filings, caches)
 data/
+!evals/data/
 .cache/
 
 # OS / editors
@@ -37,3 +38,6 @@ data/
 
 # Generated reports (contain real company data)
 reports/
+
+# Per-company eval results (real companies; aggregates are committed instead)
+*.local.json

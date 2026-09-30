@@ -45,6 +45,8 @@ jobs:
       - name: Apply migrations
         run: uv run ukco db upgrade
       - run: uv run pytest -v
+      - name: Outcome eval (frozen snapshot, offline)
+        run: uv run ukco eval run --check --summary-md "$GITHUB_STEP_SUMMARY"
 
   docker:
     runs-on: ubuntu-latest

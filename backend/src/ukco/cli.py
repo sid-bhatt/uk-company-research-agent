@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Annotated
 
@@ -25,6 +26,9 @@ ingest = typer.Typer(no_args_is_help=True, help="Run ingestion pipeline steps.")
 app.add_typer(ch, name="ch")
 app.add_typer(db, name="db")
 app.add_typer(ingest, name="ingest")
+evals = typer.Typer(no_args_is_help=True, help="Point-in-time outcome evaluation.")
+app.add_typer(evals, name="eval")
+EVAL_DIR = Path(__file__).resolve().parents[3] / "evals"
 
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
@@ -388,6 +392,95 @@ def report(
         narrative += f", ${p.llm.cost_usd:.4f}, {p.llm.latency_ms} ms"
     typer.echo(f"narrative: {narrative}")
     typer.echo(f"→ {stem.with_suffix('.md')}\n→ {stem.with_suffix('.json')}")
+
+
+@evals.command("build")
+def eval_build(
+    name: Annotated[str, typer.Option(help="Dataset name under evals/data/.")] = "v0",
+    seed: int = 7,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Sample and label companies from the LIVE API into a frozen snapshot (run once)."""
+    from ukco.evals.build import build_eval_set
+    from ukco.evals.frozen import write_snapshot
+
+    logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(message)s")
+
+    async def go():
+        async with client_from_settings() as client:
+            return await build_eval_set(client, seed=seed)
+
+    companies, stats = asyncio.run(go())
+    path = EVAL_DIR / "data" / name / "snapshot.jsonl.gz"
+    write_snapshot(path, companies)
+    seconds = sorted(stats.seconds_per_company)
+    typer.echo(f"kept {len(companies)} of {stats.candidates} candidates → {path}")
+    typer.echo(f"outcomes: {dict(Counter(c.outcome for c in companies))}")
+    typer.echo(
+        f"ineligible: {dict(stats.ineligible)}; over quota: {stats.over_quota}; "
+        f"errors: {stats.errors}"
+    )
+    if seconds:
+        typer.echo(f"live fetch per kept company: median {seconds[len(seconds) // 2]:.1f}s")
+
+
+@evals.command("fidelity-sheet")
+def eval_fidelity_sheet(
+    name: Annotated[str, typer.Option(help="Dataset name under evals/data/.")] = "v0",
+    companies: int = 12,
+) -> None:
+    """Write a rule-fidelity labelling sheet (CSV) for a human reviewer to fill in."""
+    from ukco.evals.run import fidelity_sheet
+
+    out = EVAL_DIR / "labels" / f"rule_fidelity_{name}.csv"
+    rows = asyncio.run(
+        fidelity_sheet(EVAL_DIR / "data" / name / "snapshot.jsonl.gz", out, companies=companies)
+    )
+    typer.echo(f"{rows} rows → {out}")
+    typer.echo("Fill in your_verdict (agree/disagree) by checking each company's page.")
+
+
+@evals.command("run")
+def eval_run(
+    name: Annotated[str, typer.Option(help="Dataset name under evals/data/.")] = "v0",
+    summary_md: Annotated[
+        Path | None,
+        typer.Option(help="Also append the Markdown summary here (e.g. CI step summary)."),
+    ] = None,
+    check: Annotated[bool, typer.Option(help="Fail if AUC regresses vs the baseline.")] = False,
+    update_baseline: Annotated[
+        bool, typer.Option(help="Save this run as the new baseline.")
+    ] = False,
+    tolerance: float = 0.05,
+) -> None:
+    """Replay the frozen snapshot offline, score as of the eval date, compare to outcomes."""
+    from ukco.evals.run import evaluate, fidelity_score, summarise, to_markdown, write_results
+
+    snapshot = EVAL_DIR / "data" / name / "snapshot.jsonl.gz"
+    baseline_path = EVAL_DIR / "baseline.json"
+    baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
+
+    results = asyncio.run(evaluate(snapshot))
+    summary = summarise(results)
+    sheet = EVAL_DIR / "labels" / f"rule_fidelity_{name}.csv"
+    summary["rule_fidelity"] = fidelity_score(sheet) if sheet.exists() else None
+    write_results(EVAL_DIR / "results" / name, results, summary)
+    markdown = to_markdown(summary, baseline)
+    typer.echo(markdown)
+    if summary_md:
+        with summary_md.open("a") as f:
+            f.write(markdown)
+    if update_baseline:
+        baseline_path.write_text(json.dumps(summary, indent=2) + "\n")
+        typer.secho(f"baseline updated → {baseline_path}", fg="green")
+    if check and baseline:
+        now, before = summary["score_auc"]["auc"], baseline["score_auc"]["auc"]
+        if now is None or now < before - tolerance:
+            typer.secho(
+                f"✗ AUC {now} regressed below baseline {before} - {tolerance}", fg="red", err=True
+            )
+            raise typer.Exit(code=1)
+        typer.secho(f"✓ AUC {now} within {tolerance} of baseline {before}", fg="green")
 
 
 if __name__ == "__main__":
