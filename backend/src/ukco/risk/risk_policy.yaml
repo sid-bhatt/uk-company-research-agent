@@ -64,6 +64,17 @@ rules:
     severity: medium
     severity_if_insolvency_links: high
 
+  financial_deterioration:
+    # Compares the two most recent year-ends in filed iXBRL accounts (each filing also
+    # carries the prior year's comparatives). Micro-entity accounts rarely report cash,
+    # so net assets and net current assets carry most of the signal.
+    drop_metrics: [net_assets, net_current_assets, current_assets, cash]
+    min_drop_share: 0.5       # fell by at least half …
+    min_prior_value: 10000    # … from a base of at least £10k (ignore tiny-base swings)
+    drop_severity: medium
+    net_liabilities_severity: medium   # liabilities exceed assets
+    turned_negative_severity: high     # net assets went from positive to negative
+
 # Higher-risk sectors for financial crime, loosely following the UK National Risk
 # Assessment of money laundering. SIC 2007 codes.
 high_risk_sic_codes:

@@ -241,7 +241,12 @@ def fetch(
     async def go():
         async with client_from_settings() as client:
             return await ingest_companies(
-                client, get_engine(), [company_number], network=network, trigger="fetch"
+                client,
+                get_engine(),
+                [company_number],
+                network=network,
+                financials=True,
+                trigger="fetch",
             )
 
     try:

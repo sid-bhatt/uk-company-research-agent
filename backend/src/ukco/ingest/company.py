@@ -17,9 +17,9 @@ import json
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import Connection, Engine, Table, and_, func, or_, select, text
+from sqlalchemy import Connection, Engine, Table, and_, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError
@@ -35,9 +35,12 @@ from ukco.companies_house.models import (
 )
 from ukco.db.models import (
     Appointment,
+    Base,
     Company,
     Document,
+    DocumentBlob,
     Filing,
+    FinancialFactRow,
     IngestionRun,
     SourceSnapshot,
 )
@@ -47,6 +50,8 @@ from ukco.db.models import (
     PscStatement as PscStatementRow,
 )
 from ukco.evidence import EvidenceIndex, StoredResponse
+from ukco.financials.extract import EXTRACTOR_VERSION, FinancialFact, extract_financials
+from ukco.financials.ixbrl import IxbrlError, parse_ixbrl
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +61,7 @@ DOCUMENT_LOOKBACK_YEARS = 3
 NETWORK_WINDOW_YEARS = 3  # officers resigned longer ago than this aren't network-checked
 MAX_NETWORK_OFFICERS = 25  # bounds rate-limit cost for large boards
 MAX_APPOINTMENTS_PER_OFFICER = 200
+MAX_ACCOUNTS_DOCUMENTS = 2  # latest two filings → up to three years of figures
 
 
 # --- Bundle (fetch) ------------------------------------------------------------------
@@ -67,6 +73,28 @@ class RawResponse:
     params: dict[str, Any]
     body: Any
     fetched_at: dt.datetime
+
+
+IXBRL = "application/xhtml+xml"
+
+
+@dataclass
+class AccountsDocument:
+    """One filed set of accounts: where it came from, what format, what we extracted."""
+
+    transaction_id: str
+    document_id: str
+    filed_on: dt.date
+    made_up_to: dt.date | None
+    description: str | None
+    format: str | None = None  # ixbrl | pdf (None: metadata unavailable)
+    content: bytes | None = None  # iXBRL bytes; PDFs are not downloaded in v1
+    facts: list[FinancialFact] = field(default_factory=list)
+    error: str | None = None
+
+    @property
+    def is_dormant(self) -> bool:
+        return "dormant" in (self.description or "")
 
 
 @dataclass
@@ -84,7 +112,42 @@ class CompanyBundle:
     networks: dict[str, OfficerNetwork] = field(default_factory=dict)
     network_errors: dict[str, str] = field(default_factory=dict)
     network_skipped: list[str] = field(default_factory=list)  # over MAX_NETWORK_OFFICERS
+    accounts: list[AccountsDocument] = field(default_factory=list)  # newest first
     responses: list[RawResponse] = field(default_factory=list)
+
+
+async def fetch_accounts(
+    client: CompaniesHouseClient, filings: Sequence[FilingHistoryItem]
+) -> list[AccountsDocument]:
+    """The latest MAX_ACCOUNTS_DOCUMENTS sets of accounts. iXBRL is downloaded and parsed
+    (each filing also carries the prior year's comparatives); PDF-only accounts are
+    recorded but not downloaded (OCR fallback is post-v1, ADR-003)."""
+    candidates = sorted(
+        (f for f in filings if f.type == "AA" and f.document_id and f.date),
+        key=lambda f: f.date or dt.date.min,
+        reverse=True,
+    )[:MAX_ACCOUNTS_DOCUMENTS]
+    out: list[AccountsDocument] = []
+    for f in candidates:
+        assert f.document_id and f.date
+        made_up = f.description_values.get("made_up_date")
+        doc = AccountsDocument(
+            transaction_id=f.transaction_id,
+            document_id=f.document_id,
+            filed_on=f.date,
+            made_up_to=dt.date.fromisoformat(str(made_up)) if made_up else None,
+            description=f.description,
+        )
+        try:
+            meta = await client.get_document_metadata(f.document_id)
+            doc.format = "ixbrl" if IXBRL in meta.media_types else "pdf"
+            if doc.format == "ixbrl":
+                doc.content = await client.get_document_content(f.document_id, IXBRL)
+                doc.facts = extract_financials(parse_ixbrl(doc.content), f.document_id)
+        except (CompaniesHouseError, IxbrlError) as exc:  # one document failing isn't fatal
+            doc.error = str(exc)
+        out.append(doc)
+    return out
 
 
 def network_candidates(officers: Iterable[Officer], today: dt.date) -> list[str]:
@@ -110,6 +173,7 @@ async def fetch_bundle(
     company_number: str,
     *,
     network: bool = True,
+    financials: bool = True,
     today: dt.date | None = None,
 ) -> CompanyBundle:
     """Every register a KYB report needs, plus each response verbatim for evidence."""
@@ -157,6 +221,8 @@ async def fetch_bundle(
                     )
                 except CompaniesHouseError as exc:  # one officer failing isn't fatal
                     bundle.network_errors[officer_id] = str(exc)
+        if financials:
+            bundle.accounts = await fetch_accounts(client, filings)
         bundle.responses = responses
         return bundle
     finally:
@@ -178,7 +244,7 @@ class UpsertCounts:
         self.unchanged += other.unchanged
 
 
-COUNTED = ("companies", "appointments", "pscs", "filings")
+COUNTED = ("companies", "appointments", "pscs", "filings", "financial_facts")
 
 
 @dataclass
@@ -188,6 +254,8 @@ class CompanyResult:
     appointments: UpsertCounts = field(default_factory=UpsertCounts)
     pscs: UpsertCounts = field(default_factory=UpsertCounts)
     filings: UpsertCounts = field(default_factory=UpsertCounts)
+    financial_facts: UpsertCounts = field(default_factory=UpsertCounts)
+    accounts_formats: dict[str, int] = field(default_factory=dict)  # ixbrl / pdf / error
     documents_queued: int = 0
     network_officers: int = 0
     network_truncated: int = 0
@@ -201,7 +269,7 @@ class CompanyResult:
 
 def upsert(
     conn: Connection,
-    table: Table,
+    model: type[Base],
     rows: Sequence[dict[str, Any]],
     *,
     tracked: Sequence[str],
@@ -215,6 +283,7 @@ def upsert(
     """
     if not rows:
         return UpsertCounts()
+    table = cast(Table, model.__table__)
     stmt = insert(table).values(list(rows))
     excluded = stmt.excluded
     stmt = stmt.on_conflict_do_update(
@@ -260,26 +329,54 @@ def store_snapshots(conn: Connection, responses: Sequence[RawResponse]) -> list[
 
 
 COMPANY_TRACKED = [
-    "name", "status", "type", "jurisdiction", "date_of_creation", "date_of_cessation",
-    "registered_office", "sic_codes", "has_insolvency_history", "has_been_liquidated",
-    "registered_office_is_in_dispute", "undeliverable_registered_office_address",
-    "accounts_next_due", "accounts_overdue", "last_accounts_made_up_to",
-    "confirmation_statement_next_due", "confirmation_statement_overdue", "raw",
-]  # fmt: skip
+    "name",
+    "status",
+    "type",
+    "jurisdiction",
+    "date_of_creation",
+    "date_of_cessation",
+    "registered_office",
+    "sic_codes",
+    "has_insolvency_history",
+    "has_been_liquidated",
+    "registered_office_is_in_dispute",
+    "undeliverable_registered_office_address",
+    "accounts_next_due",
+    "accounts_overdue",
+    "last_accounts_made_up_to",
+    "confirmation_statement_next_due",
+    "confirmation_statement_overdue",
+    "raw",
+]
 COMPANY_SIDE_APPOINTMENT_TRACKED = [
-    "resigned_on", "appointment_id", "name", "nationality", "occupation",
+    "resigned_on",
+    "appointment_id",
+    "name",
+    "nationality",
+    "occupation",
     "country_of_residence",
-]  # fmt: skip
+]
 NETWORK_APPOINTMENT_TRACKED = ["resigned_on"]  # the company-side row is richer; don't clobber
 PERSON_TRACKED = ["name", "is_corporate", "total_appointments", "appointments_truncated"]
 PSC_TRACKED = [
-    "kind", "name", "natures_of_control", "notified_on", "ceased_on", "nationality",
+    "kind",
+    "name",
+    "natures_of_control",
+    "notified_on",
+    "ceased_on",
+    "nationality",
     "country_of_residence",
-]  # fmt: skip
+]
 FILING_TRACKED = [
-    "category", "type", "date", "description", "description_values", "pages",
-    "paper_filed", "document_id",
-]  # fmt: skip
+    "category",
+    "type",
+    "date",
+    "description",
+    "description_values",
+    "pages",
+    "paper_filed",
+    "document_id",
+]
 APPOINTMENT_EDGE = "uq_appointments_edge"
 
 
@@ -319,16 +416,16 @@ def _upsert_stub_companies(conn: Connection, rows: list[dict[str, Any]]) -> None
     profile with the thinner stub data."""
     if not rows:
         return
-    table = Company.__table__
+    table = cast(Table, Company.__table__)
     stmt = insert(Company).values(_dedupe(rows, "company_number"))
     stmt = stmt.on_conflict_do_update(
         index_elements=["company_number"],
         set_={"name": stmt.excluded.name, "status": stmt.excluded.status, "updated_at": func.now()},
         where=and_(
-            table.c.profile_fetched_at.is_(None),  # type: ignore[attr-defined]
+            table.c.profile_fetched_at.is_(None),
             or_(
-                table.c.name.is_distinct_from(stmt.excluded.name),  # type: ignore[attr-defined]
-                table.c.status.is_distinct_from(stmt.excluded.status),  # type: ignore[attr-defined]
+                table.c.name.is_distinct_from(stmt.excluded.name),
+                table.c.status.is_distinct_from(stmt.excluded.status),
             ),
         ),
     )
@@ -350,9 +447,13 @@ def persist_bundle(
     )
 
     result.companies = upsert(
-        conn, Company.__table__, [_company_row(b)],  # type: ignore[arg-type]
-        key=["company_number"], tracked=COMPANY_TRACKED, also_set=["profile_fetched_at"],
-    )  # fmt: skip
+        conn,
+        Company,
+        [_company_row(b)],
+        key=["company_number"],
+        tracked=COMPANY_TRACKED,
+        also_set=["profile_fetched_at"],
+    )
 
     # People: bare rows from the company's officer list, richer rows from their networks.
     officers = [o for o in b.officers if o.officer_id]
@@ -365,7 +466,7 @@ def persist_bundle(
         )
     upsert(
         conn,
-        PersonRow.__table__,  # type: ignore[arg-type]
+        PersonRow,
         [
             {
                 "officer_id": oid,
@@ -430,21 +531,30 @@ def persist_bundle(
         ],
         *edge,
     )
-    appointments = Appointment.__table__
     for batch in _batches(company_side):
-        result.appointments.add(upsert(
-            conn, appointments, batch,  # type: ignore[arg-type]
-            constraint=APPOINTMENT_EDGE, tracked=COMPANY_SIDE_APPOINTMENT_TRACKED,
-        ))  # fmt: skip
+        result.appointments.add(
+            upsert(
+                conn,
+                Appointment,
+                batch,
+                constraint=APPOINTMENT_EDGE,
+                tracked=COMPANY_SIDE_APPOINTMENT_TRACKED,
+            )
+        )
     for batch in _batches(network_side):
-        result.appointments.add(upsert(
-            conn, appointments, batch,  # type: ignore[arg-type]
-            constraint=APPOINTMENT_EDGE, tracked=NETWORK_APPOINTMENT_TRACKED,
-        ))  # fmt: skip
+        result.appointments.add(
+            upsert(
+                conn,
+                Appointment,
+                batch,
+                constraint=APPOINTMENT_EDGE,
+                tracked=NETWORK_APPOINTMENT_TRACKED,
+            )
+        )
 
     result.pscs = upsert(
         conn,
-        PscRow.__table__,  # type: ignore[arg-type]
+        PscRow,
         _dedupe(
             [
                 {
@@ -468,7 +578,7 @@ def persist_bundle(
     )
     upsert(
         conn,
-        PscStatementRow.__table__,  # type: ignore[arg-type]
+        PscStatementRow,
         _dedupe(
             [
                 {
@@ -506,10 +616,19 @@ def persist_bundle(
         "transaction_id",
     )
     for batch in _batches(filing_rows):
-        result.filings.add(upsert(
-            conn, Filing.__table__, batch,  # type: ignore[arg-type]
-            key=["company_number", "transaction_id"], tracked=FILING_TRACKED,
-        ))  # fmt: skip
+        result.filings.add(
+            upsert(
+                conn,
+                Filing,
+                batch,
+                key=["company_number", "transaction_id"],
+                tracked=FILING_TRACKED,
+            )
+        )
+    result.financial_facts = _persist_accounts(conn, n, b.accounts)
+    for doc in b.accounts:
+        key = "error" if doc.error else doc.format or "unknown"
+        result.accounts_formats[key] = result.accounts_formats.get(key, 0) + 1
     result.documents_queued = _queue_documents(
         conn, n, [f for f in b.filings if wants_document(f, today)]
     )
@@ -519,6 +638,84 @@ def persist_bundle(
     result.network_errors = len(b.network_errors)
     result.network_skipped = len(b.network_skipped)
     return result
+
+
+DOCUMENT_TRACKED = ["media_type", "format", "status", "content_sha256", "size_bytes", "error"]
+FACT_TRACKED = ["period_start", "value", "unit", "concept", "locator", "extractor_version"]
+
+
+def _persist_accounts(
+    conn: Connection, company_number: str, accounts: Sequence[AccountsDocument]
+) -> UpsertCounts:
+    """Store each accounts document's bytes (evidence), status and extracted figures."""
+    if not accounts:
+        return UpsertCounts()
+    filing_ids = dict(
+        conn.execute(
+            select(Filing.transaction_id, Filing.id).where(
+                Filing.company_number == company_number,
+                Filing.transaction_id.in_([d.transaction_id for d in accounts]),
+            )
+        ).all()
+    )
+    doc_rows = []
+    for d in accounts:
+        sha = hashlib.sha256(d.content).hexdigest() if d.content else None
+        if d.content and sha:
+            conn.execute(
+                insert(DocumentBlob)
+                .values(sha256=sha, media_type=IXBRL, content=d.content)
+                .on_conflict_do_nothing(index_elements=["sha256"])
+            )
+        status = "failed" if d.error else "parsed" if d.facts or d.content else "pending"
+        doc_rows.append(
+            {
+                "document_id": d.document_id,
+                "filing_id": filing_ids[d.transaction_id],
+                "company_number": company_number,
+                "media_type": IXBRL
+                if d.format == "ixbrl"
+                else "application/pdf"
+                if d.format
+                else None,
+                "format": d.format,
+                "status": status,
+                "content_sha256": sha,
+                "size_bytes": len(d.content) if d.content else None,
+                "error": d.error,
+            }
+        )
+    upsert(
+        conn,
+        Document,
+        _dedupe(doc_rows, "document_id"),
+        key=["document_id"],
+        tracked=DOCUMENT_TRACKED,
+    )
+
+    fact_rows = [
+        {
+            "document_id": f.document_id,
+            "company_number": company_number,
+            "metric": f.metric,
+            "period_start": f.period_start,
+            "period_end": f.period_end,
+            "value": f.value,
+            "unit": f.unit,
+            "concept": f.concept,
+            "locator": f.locator,
+            "extractor_version": EXTRACTOR_VERSION,
+        }
+        for d in accounts
+        for f in d.facts
+    ]
+    return upsert(
+        conn,
+        FinancialFactRow,
+        _dedupe(fact_rows, "document_id", "metric", "period_end"),
+        constraint="uq_financial_facts",
+        tracked=FACT_TRACKED,
+    )
 
 
 def wants_document(f: FilingHistoryItem, today: dt.date) -> bool:
@@ -566,11 +763,14 @@ async def ingest_company(
     company_number: str,
     *,
     network: bool = True,
+    financials: bool = True,
     today: dt.date | None = None,
 ) -> CompanyResult:
     """Fetch (network I/O) then persist in one transaction: no transaction is held open
     across API calls."""
-    bundle = await fetch_bundle(client, company_number, network=network, today=today)
+    bundle = await fetch_bundle(
+        client, company_number, network=network, financials=financials, today=today
+    )
     with engine.begin() as conn:
         return persist_bundle(conn, bundle, today=today)
 
@@ -581,21 +781,23 @@ async def ingest_companies(
     company_numbers: Sequence[str],
     *,
     network: bool = False,
+    financials: bool = False,
     trigger: str = "cli",
 ) -> tuple[int, list[CompanyResult]]:
     """Ingest many companies, recording the run and its evidence manifest.
     One company failing doesn't stop the rest."""
+    params = {"companies": len(company_numbers), "network": network, "financials": financials}
     with engine.begin() as conn:
         run_id = conn.execute(
-            insert(IngestionRun)
-            .values(trigger=trigger, params={"companies": len(company_numbers), "network": network})
-            .returning(IngestionRun.id)
+            insert(IngestionRun).values(trigger=trigger, params=params).returning(IngestionRun.id)
         ).scalar_one()
 
     results: list[CompanyResult] = []
     for number in company_numbers:
         try:
-            res = await ingest_company(client, engine, number, network=network)
+            res = await ingest_company(
+                client, engine, number, network=network, financials=financials
+            )
         except (CompaniesHouseError, ValueError) as exc:
             log.warning("company %s failed: %s", number, exc)
             res = CompanyResult(number, error=str(exc))
@@ -608,7 +810,7 @@ async def ingest_companies(
     status = "failed" if len(failed) == len(results) else "partial" if failed else "succeeded"
     with engine.begin() as conn:
         conn.execute(
-            IngestionRun.__table__.update()  # type: ignore[attr-defined]
+            update(IngestionRun)
             .where(IngestionRun.id == run_id)
             .values(
                 status=status,
@@ -637,10 +839,19 @@ def summarise(results: Sequence[CompanyResult]) -> dict[str, Any]:
         totals[kind] = {"inserted": 0, "updated": 0, "unchanged": 0}
     for r in results:
         totals["companies_failed" if r.error else "companies_ok"] += 1
-        for k in ("documents_queued", "network_officers", "network_truncated",
-                  "network_errors", "network_skipped", "linked_companies"):  # fmt: skip
+        for k in (
+            "documents_queued",
+            "network_officers",
+            "network_truncated",
+            "network_errors",
+            "network_skipped",
+            "linked_companies",
+        ):
             totals[k] += getattr(r, k)
         totals["snapshots"] += len(r.snapshot_ids)
+        formats = totals.setdefault("accounts_formats", {})
+        for fmt, count in r.accounts_formats.items():
+            formats[fmt] = formats.get(fmt, 0) + count
         for kind in COUNTED:
             counts: UpsertCounts = getattr(r, kind)
             for k in ("inserted", "updated", "unchanged"):

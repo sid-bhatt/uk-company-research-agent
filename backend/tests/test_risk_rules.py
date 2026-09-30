@@ -12,8 +12,10 @@ from typing import Any
 import pytest
 
 from tests.fakes import ACTIVE, GREGGS, LIQUIDATION, TODAY, FakeCompaniesHouse
+from tests.ixbrl_builder import micro_accounts
 from ukco.companies_house.models import CompanyProfile
 from ukco.evidence import EvidenceIndex, StoredResponse, resolve_pointer
+from ukco.financials.ixbrl import parse_ixbrl
 from ukco.ingest.company import CompanyBundle, fetch_bundle
 from ukco.risk import Assessment, RuleOutcome, assess, default_policy, load_policy
 from ukco.risk.deadlines import accounts_due, add_months, confirmation_statement_due
@@ -45,9 +47,17 @@ async def run(ch: FakeCompaniesHouse, number: str, as_of: dt.date | None = None)
 
 def assert_citations_resolve(result: Assessment, bundle: CompanyBundle) -> None:
     bodies = {i + 1: r.body for i, r in enumerate(bundle.responses)}
+    documents = {d.document_id: d for d in bundle.accounts}
     for flag in result.flags:
         for c in flag.evidence:
-            resolve_pointer(bodies[c.snapshot_id], c.pointer)  # raises if it doesn't resolve
+            if c.kind == "api":
+                assert c.snapshot_id is not None
+                resolve_pointer(bodies[c.snapshot_id], c.pointer)  # raises if it doesn't resolve
+            else:
+                doc = documents[c.document_id or ""]
+                assert doc.content, "document citation without stored content"
+                locators = {f.locator for f in parse_ixbrl(doc.content).facts}
+                assert c.pointer in locators, f"{c.pointer} not in document {c.document_id}"
 
 
 def outcome(result: Assessment, rule: str) -> RuleOutcome:
@@ -327,6 +337,115 @@ async def test_mostly_healthy_network_is_clear() -> None:
     ]
     result = await run(ch, ACTIVE)
     assert outcome(result, "officer_network").status == "clear"  # 5 of 11 < 50%
+
+
+# --- Financial deterioration -------------------------------------------------------------
+# The active company's two latest accounts filings: made up to 2025-04-05 (filed 2025-04-15)
+# and to 2024-04-05 (filed 2024-04-30). Each iXBRL filing carries the prior year too.
+
+
+def set_accounts(
+    ch: FakeCompaniesHouse, latest: bytes | None, previous: bytes | None = None
+) -> None:
+    newest, older = ch.accounts_document_ids(ACTIVE)[:2]
+    ch.documents[newest] = latest
+    if previous is not None:
+        ch.documents[older] = previous
+
+
+async def test_sharp_fall_in_assets_is_flagged_with_document_citations() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={
+                "NetAssetsLiabilities": 8_000,
+                "NetCurrentAssetsLiabilities": 5_000,
+                "CurrentAssets": 9_000,
+            },
+            before={
+                "NetAssetsLiabilities": 40_000,
+                "NetCurrentAssetsLiabilities": 30_000,
+                "CurrentAssets": 50_000,
+            },
+        ),
+    )
+
+    result = await run(ch, ACTIVE)
+    fin = outcome(result, "financial_deterioration")
+    assert fin.status == "flagged"
+    (flag,) = fin.flags
+    assert flag.flag_type == "financial_deterioration" and flag.severity == "medium"
+    assert "net assets £40,000 → £8,000 (80% down)" in flag.explanation
+    assert all(c.kind == "document" for c in flag.evidence)
+    assert flag.evidence[0].url.endswith("/document?format=xhtml&download=0")
+
+
+async def test_net_assets_turning_negative_is_high() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={"NetAssetsLiabilities": -12_000},
+            before={"NetAssetsLiabilities": 15_000},
+        ),
+    )
+
+    result = await run(ch, ACTIVE)
+    flags = {f.flag_type: f for f in outcome(result, "financial_deterioration").flags}
+    assert flags["net_liabilities"].severity == "high"
+    assert flags["net_liabilities"].title == "Net assets turned negative"
+    assert "-£12,000" in flags["net_liabilities"].explanation
+    assert result.risk_score == 30 + 15  # plus the drop itself
+
+
+async def test_small_base_swings_are_ignored() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={"NetAssetsLiabilities": 100},
+            before={"NetAssetsLiabilities": 3_000},
+        ),
+    )
+    fin = outcome(await run(ch, ACTIVE), "financial_deterioration")
+    assert fin.status == "clear" and "£100" in (fin.note or "")
+
+
+async def test_pdf_only_accounts_are_not_assessed() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(ch, None, None)  # both PDF
+    fin = outcome(await run(ch, ACTIVE), "financial_deterioration")
+    assert fin.status == "not_assessed" and "PDF-only" in (fin.note or "")
+
+
+async def test_back_test_only_sees_accounts_filed_by_as_of() -> None:
+    ch = FakeCompaniesHouse()
+    healthy = micro_accounts(
+        "2024-04-05",
+        "2023-04-05",
+        now={"NetAssetsLiabilities": 50_000},
+        before={"NetAssetsLiabilities": 45_000},
+    )
+    collapsed = micro_accounts(
+        "2025-04-05",
+        "2024-04-05",
+        now={"NetAssetsLiabilities": -5_000},
+        before={"NetAssetsLiabilities": 50_000},
+    )
+    set_accounts(ch, collapsed, healthy)
+
+    live = await run(ch, ACTIVE)
+    assert outcome(live, "financial_deterioration").status == "flagged"
+    before_filing = await run(ch, ACTIVE, as_of=dt.date(2025, 1, 1))  # 2025 accounts not yet filed
+    fin = outcome(before_filing, "financial_deterioration")
+    assert fin.status == "clear" and "£50,000 at 2024-04-05" in (fin.note or "")
 
 
 # --- Engine and policy ----------------------------------------------------------------------

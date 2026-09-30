@@ -63,7 +63,8 @@ def engine(database_url: str) -> Iterator[Engine]:
     with eng.begin() as conn:
         conn.exec_driver_sql(
             "TRUNCATE companies, officers, appointments, pscs, psc_statements, filings, "
-            "documents, chunks, source_snapshots, ingestion_runs RESTART IDENTITY CASCADE"
+            "documents, document_blobs, financial_facts, chunks, source_snapshots, "
+            "ingestion_runs RESTART IDENTITY CASCADE"
         )
     yield eng
     eng.dispose()

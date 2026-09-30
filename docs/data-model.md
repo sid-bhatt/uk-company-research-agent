@@ -29,7 +29,8 @@ erDiagram
 | `filings` | `(company_number, transaction_id)` | Unchanged. `AD01` → office history, `GAZ1`/`DS01` → outcomes, `AA` → accounts | keep |
 | `office_changes` | view over `filings` where `type = 'AD01'` | `change_date`, `old_address`, `new_address` from `description_values` | new (view) |
 | `documents` | `document_id` | Adds `format` (`ixbrl`/`pdf`) | keep |
-| `financial_facts` | `(document_id, metric, period_end)` | `value`, `unit`, `source` (`ixbrl` tag name or `ocr_llm` page), `extractor_version`, `confidence` | new |
+| `financial_facts` | `(document_id, metric, period_end)` | `value`, `unit`, `concept` (taxonomy tag), `locator` (which tag in the document), `period_start` (null = balance-sheet instant), `extractor_version` | ✅ Day 7 |
+| `document_blobs` | `sha256` | Downloaded document bytes (iXBRL), content-addressed; the evidence behind document citations. S3 in production | ✅ Day 7 |
 | `chunks` | `(document_id, chunk_index)` | For chat/evidence search; embedding column arrives when needed | keep |
 | `source_snapshots` | `id`; unique `sha256` | Raw API response body, `path`, `params`, `fetched_at`. What citations point at | new |
 | `ingestion_runs` | `id` | Unchanged | keep |
@@ -45,7 +46,7 @@ erDiagram
 ## Citation format
 ```json
 {"kind": "api", "snapshot_id": 812, "pointer": "/items/3/resigned_on", "url": "https://find-and-update.company-information.service.gov.uk/company/13237895/officers"}
-{"kind": "document", "document_id": "abc…", "page": 7, "element": "ix:nonFraction#NetAssetsLiabilities"}
+{"kind": "document", "document_id": "abc…", "pointer": "ix:nonFraction[name=core:NetAssetsLiabilities][contextRef=c3][1]", "url": "…/filing-history/{txn}/document?format=xhtml&download=0"}
 ```
 A validator rejects any report whose citations don't resolve to a stored snapshot/document.
 

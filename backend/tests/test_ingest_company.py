@@ -12,13 +12,16 @@ from sqlalchemy import Engine, func, select, update
 
 from tests.conftest import alembic_config
 from tests.fakes import ACTIVE, GREGGS, LIQUIDATION, TODAY, FakeCompaniesHouse
+from tests.ixbrl_builder import micro_accounts
 from ukco.companies_house.models import Officer as ApiOfficer
 from ukco.db.models import (
     Appointment,
     Base,
     Company,
     Document,
+    DocumentBlob,
     Filing,
+    FinancialFactRow,
     IngestionRun,
     Officer,
     Psc,
@@ -41,7 +44,9 @@ def count(engine: Engine, model: type, *where: Any) -> int:
 async def test_first_run_inserts_everything(engine: Engine) -> None:
     ch = FakeCompaniesHouse()
     async with ch.client() as client:
-        result = await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        result = await ingest_company(
+            client, engine, GREGGS, network=False, financials=False, today=TODAY
+        )
 
     n_officers = len(ch.routes[f"/company/{GREGGS}/officers"]["items"])
     n_filings = len(ch.routes[f"/company/{GREGGS}/filing-history"]["items"])
@@ -62,10 +67,14 @@ async def test_first_run_inserts_everything(engine: Engine) -> None:
 async def test_rerun_is_a_no_op_and_reuses_snapshots(engine: Engine) -> None:
     ch = FakeCompaniesHouse()
     async with ch.client() as client:
-        first = await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        first = await ingest_company(
+            client, engine, GREGGS, network=False, financials=False, today=TODAY
+        )
         with engine.connect() as conn:
             before = conn.execute(select(func.max(Filing.updated_at))).scalar_one()
-        second = await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        second = await ingest_company(
+            client, engine, GREGGS, network=False, financials=False, today=TODAY
+        )
 
     assert second.companies.unchanged == 1
     assert second.appointments.inserted == second.appointments.updated == 0
@@ -80,12 +89,14 @@ async def test_rerun_is_a_no_op_and_reuses_snapshots(engine: Engine) -> None:
 async def test_only_changed_rows_are_updated(engine: Engine) -> None:
     ch = FakeCompaniesHouse()
     async with ch.client() as client:
-        await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        await ingest_company(client, engine, GREGGS, network=False, financials=False, today=TODAY)
 
         officers = copy.deepcopy(ch.routes[f"/company/{GREGGS}/officers"])
         officers["items"][0]["resigned_on"] = "2026-09-01"
         ch.routes[f"/company/{GREGGS}/officers"] = officers
-        result = await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        result = await ingest_company(
+            client, engine, GREGGS, network=False, financials=False, today=TODAY
+        )
 
     assert result.appointments.updated == 1
     assert result.appointments.unchanged == len(officers["items"]) - 1
@@ -95,10 +106,10 @@ async def test_only_changed_rows_are_updated(engine: Engine) -> None:
 async def test_requeue_never_resets_document_progress(engine: Engine) -> None:
     ch = FakeCompaniesHouse()
     async with ch.client() as client:
-        await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        await ingest_company(client, engine, GREGGS, network=False, financials=False, today=TODAY)
         with engine.begin() as conn:
             conn.execute(update(Document).values(status="parsed"))
-        await ingest_company(client, engine, GREGGS, network=False, today=TODAY)
+        await ingest_company(client, engine, GREGGS, network=False, financials=False, today=TODAY)
 
     with engine.connect() as conn:
         statuses = set(conn.execute(select(Document.status)).scalars())
@@ -202,23 +213,57 @@ async def test_every_citation_resolves_to_the_fact_it_names(engine: Engine) -> N
 
     ev = result.evidence
     profile = ev.require("profile", ACTIVE)
-    assert resolve_pointer(bodies[profile.snapshot_id], profile.pointer)["company_number"] == ACTIVE
+    assert (
+        resolve_pointer(bodies[profile.snapshot_id or 0], profile.pointer)["company_number"]
+        == ACTIVE
+    )
 
     for item in ch.routes[f"/company/{ACTIVE}/filing-history"]["items"]:
         c = ev.require("filing", ACTIVE, item["transaction_id"])
         assert (
-            resolve_pointer(bodies[c.snapshot_id], c.pointer)["transaction_id"]
+            resolve_pointer(bodies[c.snapshot_id or 0], c.pointer)["transaction_id"]
             == item["transaction_id"]
         )
 
     for item in ch.routes[f"/company/{ACTIVE}/persons-with-significant-control"]["items"]:
         psc_id = item["links"]["self"].rsplit("/", 1)[-1]
         c = ev.require("psc", ACTIVE, psc_id)
-        assert resolve_pointer(bodies[c.snapshot_id], c.pointer)["links"]["self"].endswith(psc_id)
+        assert resolve_pointer(bodies[c.snapshot_id or 0], c.pointer)["links"]["self"].endswith(
+            psc_id
+        )
         assert c.url.startswith("https://find-and-update.company-information.service.gov.uk/")
 
     # Absences are citable too: "no insolvency on file" points at the stored empty response.
     assert ev.require("register", f"/company/{ACTIVE}/insolvency").pointer == ""
+
+
+async def test_ixbrl_accounts_are_stored_as_evidence_and_facts(engine: Engine) -> None:
+    ch = FakeCompaniesHouse()
+    newest, older = ch.accounts_document_ids(ACTIVE)[:2]
+    ch.documents[newest] = micro_accounts(
+        "2025-04-05", "2024-04-05",
+        now={"NetAssetsLiabilities": 8_000}, before={"NetAssetsLiabilities": 40_000},
+    )  # fmt: skip
+    ch.documents[older] = None  # PDF-only
+
+    async with ch.client() as client:
+        first = await ingest_company(client, engine, ACTIVE, network=False, today=TODAY)
+        second = await ingest_company(client, engine, ACTIVE, network=False, today=TODAY)
+
+    assert first.financial_facts.inserted == 2  # net assets, two year-ends
+    assert first.accounts_formats == {"ixbrl": 1, "pdf": 1}
+    assert second.financial_facts.inserted == second.financial_facts.updated == 0
+    with engine.connect() as conn:
+        docs = dict(conn.execute(select(Document.document_id, Document.status)).all())
+        values = conn.execute(
+            select(FinancialFactRow.period_end, FinancialFactRow.value).order_by(
+                FinancialFactRow.period_end
+            )
+        ).all()
+        blob = conn.execute(select(DocumentBlob.content)).scalar_one()
+    assert docs[newest] == "parsed" and docs[older] == "pending"
+    assert [(str(p), int(v)) for p, v in values] == [("2024-04-05", 40_000), ("2025-04-05", 8_000)]
+    assert blob == ch.documents[newest]  # the exact bytes a citation points into
 
 
 def test_network_candidates_skip_secretaries_corporates_and_old_resignations() -> None:

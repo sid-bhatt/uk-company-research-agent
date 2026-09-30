@@ -12,10 +12,12 @@ the fetch date; in back-tests those rules report `not_assessed` rather than leak
 import datetime as dt
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from decimal import Decimal
 
 from ukco.companies_house.models import FilingHistoryItem, Officer
 from ukco.evidence import Citation, EvidenceIndex
-from ukco.ingest.company import CompanyBundle
+from ukco.financials.extract import FinancialFact
+from ukco.ingest.company import AccountsDocument, CompanyBundle
 from ukco.risk.deadlines import accounts_due, add_months, confirmation_statement_due
 from ukco.risk.models import Flag, RuleOutcome
 from ukco.risk.policy import Policy, Severity, band_for_changes, band_for_days, worst
@@ -526,12 +528,109 @@ def officer_network(ctx: RuleContext) -> RuleOutcome:
     )
 
 
+def _money(value: Decimal) -> str:
+    return f"-£{-value:,.0f}" if value < 0 else f"£{value:,.0f}"
+
+
 def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
-    return RuleOutcome(
-        rule="financial_deterioration",
-        status="not_assessed",
-        note="Financial extraction from filed accounts arrives on Day 7.",
-    )
+    rule = "financial_deterioration"
+    cfg = ctx.policy.rules.financial_deterioration
+    filed = [d for d in ctx.bundle.accounts if d.filed_on <= ctx.as_of]
+    usable = [d for d in filed if d.facts]
+    if not usable:
+        if not filed:
+            reason = "no accounts filed" + ("" if ctx.live else f" by {ctx.as_of}")
+        elif any(d.format == "pdf" for d in filed):
+            reason = "accounts are PDF-only (large or paper filers; OCR fallback is post-v1)"
+        else:
+            reason = "no figures could be extracted from the filed accounts"
+        return RuleOutcome(
+            rule=rule, status="not_assessed", note=reason[0].upper() + reason[1:] + "."
+        )
+
+    # metric → period end → (fact, document); a later filing wins for the same period
+    # (restated comparatives).
+    series: dict[str, dict[dt.date, tuple[FinancialFact, AccountsDocument]]] = {}
+    for doc in sorted(usable, key=lambda d: d.filed_on):
+        for fact in doc.facts:
+            series.setdefault(fact.metric, {})[fact.period_end] = (fact, doc)
+
+    def cite(entry: tuple[FinancialFact, AccountsDocument]) -> Citation:
+        fact, doc = entry
+        return Citation.for_document(ctx.n, doc.transaction_id, doc.document_id, fact.locator)
+
+    net_assets = series.get("net_assets", {})
+    periods = sorted(net_assets)
+    if not periods:
+        return RuleOutcome(
+            rule=rule, status="not_assessed", note="Filed accounts carry no net assets figure."
+        )
+    latest = periods[-1]
+    prior = periods[-2] if len(periods) > 1 else None
+    figures = {m: {str(p): str(e[0].value) for p, e in s.items()} for m, s in series.items()}
+    flags: list[Flag] = []
+
+    drops = []
+    for metric in cfg.drop_metrics:
+        s = series.get(metric, {})
+        if prior and latest in s and prior in s:
+            before, after = s[prior][0].value, s[latest][0].value
+            if before >= Decimal(str(cfg.min_prior_value)) and (before - after) / before >= Decimal(
+                str(cfg.min_drop_share)
+            ):
+                drops.append((metric, before, after, s[prior], s[latest]))
+    if drops:
+        described = "; ".join(
+            f"{m.replace('_', ' ')} {_money(b)} → {_money(a)} ({(b - a) / b:.0%} down)"
+            for m, b, a, *_ in drops
+        )
+        flags.append(
+            ctx.flag(
+                rule,
+                cfg.drop_severity,
+                "Financial deterioration",
+                f"Between the year-ends {prior} and {latest}: {described}.",
+                [
+                    c
+                    for *_, before_fact, after_fact in drops
+                    for c in (cite(before_fact), cite(after_fact))
+                ],
+                period_end=str(latest),
+                prior_period_end=str(prior),
+                figures=figures,
+            )
+        )
+
+    now = net_assets[latest][0].value
+    if now < 0:
+        before = net_assets[prior][0].value if prior else None
+        turned = before is not None and before >= 0
+        evidence = [cite(net_assets[latest])] + ([cite(net_assets[prior])] if prior else [])
+        flags.append(
+            ctx.flag(
+                "net_liabilities",
+                cfg.turned_negative_severity if turned else cfg.net_liabilities_severity,
+                "Net assets turned negative" if turned else "Net liabilities",
+                f"Net assets were {_money(now)} at {latest}"
+                + (
+                    f", down from {_money(before)} at {prior}."
+                    if turned and before is not None
+                    else "."
+                ),
+                evidence,
+                net_assets=str(now),
+                period_end=str(latest),
+            )
+        )
+
+    if flags:
+        return RuleOutcome(rule=rule, status="flagged", flags=flags)
+    note = f"Net assets {_money(now)} at {latest}"
+    if prior:
+        note += f" ({_money(net_assets[prior][0].value)} at {prior})"
+    if usable[0].is_dormant:
+        note += "; dormant company accounts"
+    return RuleOutcome(rule=rule, status="clear", note=note + ".")
 
 
 RULES: list[Callable[[RuleContext], RuleOutcome]] = [

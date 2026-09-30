@@ -1,9 +1,13 @@
-"""Evidence: citations into stored API responses.
+"""Evidence: citations into stored API responses and filed documents.
 
-A citation is `snapshot_id + JSON pointer` into a `source_snapshots` row: the exact
-bytes Companies House returned when the report was built. The `EvidenceIndex` maps
-the facts rules care about ("this filing", "this appointment", "this PSC") to the
-citation where that fact appears, so every flag can cite precisely.
+Two kinds of citation:
+- **api**: `snapshot_id + JSON pointer` into a `source_snapshots` row, the exact bytes
+  Companies House returned when the report was built
+- **document**: `document_id + locator` of a tagged figure inside a filed document
+  (e.g. an iXBRL `NetAssetsLiabilities` fact), stored in `document_blobs`
+
+The `EvidenceIndex` maps the facts rules care about ("this filing", "this appointment",
+"this PSC") to the citation where that fact appears, so every flag can cite precisely.
 """
 
 import datetime as dt
@@ -12,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ukco.companies_house.models import (
     FilingHistoryItem,
@@ -26,15 +30,39 @@ WEB_BASE_URL = "https://find-and-update.company-information.service.gov.uk"
 
 
 class Citation(BaseModel):
-    kind: Literal["api"] = "api"
-    snapshot_id: int
-    pointer: str  # RFC 6901, "" = whole response
-    path: str  # API path, e.g. /company/13237895/officers
+    kind: Literal["api", "document"] = "api"
+    snapshot_id: int | None = None  # api
+    document_id: str | None = None  # document
+    pointer: str  # api: RFC 6901 ("" = whole response); document: tag locator
+    path: str  # API path, e.g. /company/13237895/officers, or /document/{id}
     url: str  # where a human can check it on the Companies House website
+
+    @model_validator(mode="after")
+    def _target_matches_kind(self) -> "Citation":
+        if self.kind == "api" and self.snapshot_id is None:
+            raise ValueError("api citation needs snapshot_id")
+        if self.kind == "document" and not self.document_id:
+            raise ValueError("document citation needs document_id")
+        return self
 
     def at(self, sub_pointer: str) -> "Citation":
         """A narrower citation inside this one, e.g. profile.at("/accounts")."""
         return self.model_copy(update={"pointer": self.pointer + sub_pointer})
+
+    @classmethod
+    def for_document(
+        cls, company_number: str, transaction_id: str, document_id: str, locator: str
+    ) -> "Citation":
+        return cls(
+            kind="document",
+            document_id=document_id,
+            pointer=locator,
+            path=f"/document/{document_id}",
+            url=(
+                f"{WEB_BASE_URL}/company/{company_number}/filing-history/{transaction_id}"
+                "/document?format=xhtml&download=0"
+            ),
+        )
 
 
 @dataclass(frozen=True)

@@ -56,6 +56,15 @@ class OfficerNetworkRule(_Strict):
     severity_if_insolvency_links: Severity
 
 
+class FinancialRule(_Strict):
+    drop_metrics: list[str]
+    min_drop_share: float
+    min_prior_value: float
+    drop_severity: Severity
+    net_liabilities_severity: Severity
+    turned_negative_severity: Severity
+
+
 class Rules(_Strict):
     overdue_accounts: OverdueRule
     overdue_confirmation_statement: OverdueRule
@@ -64,6 +73,7 @@ class Rules(_Strict):
     office_changes: OfficeChangesRule
     new_company_high_risk_sic: NewCompanyRule
     officer_network: OfficerNetworkRule
+    financial_deterioration: FinancialRule
 
 
 class Policy(_Strict):

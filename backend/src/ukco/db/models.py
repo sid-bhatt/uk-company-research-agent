@@ -12,6 +12,7 @@ Two layers (docs/data-model.md):
 """
 
 import datetime as dt
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -24,6 +25,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -236,11 +239,52 @@ class Document(Base):
         ForeignKey("companies.company_number", ondelete="CASCADE")
     )
     media_type: Mapped[str | None] = mapped_column(Text)
+    format: Mapped[str | None] = mapped_column(Text)  # ixbrl | pdf
     status: Mapped[str] = mapped_column(Text, server_default="pending")
-    content_sha256: Mapped[str | None] = mapped_column(String(64))
+    content_sha256: Mapped[str | None] = mapped_column(
+        ForeignKey("document_blobs.sha256", ondelete="SET NULL")
+    )
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     page_count: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created_at()
+    updated_at: Mapped[dt.datetime] = _updated_at()
+
+
+class DocumentBlob(Base):
+    """Downloaded document bytes, content-addressed: the evidence behind document citations.
+    (Local Postgres for v1; S3 in production.)"""
+
+    __tablename__ = "document_blobs"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    media_type: Mapped[str] = mapped_column(Text)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[dt.datetime] = _created_at()
+
+
+class FinancialFactRow(Base):
+    __tablename__ = "financial_facts"
+    __table_args__ = (
+        UniqueConstraint("document_id", "metric", "period_end", name="uq_financial_facts"),
+        Index("ix_financial_facts_company_metric", "company_number", "metric", "period_end"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE")
+    )
+    company_number: Mapped[str] = mapped_column(
+        ForeignKey("companies.company_number", ondelete="CASCADE")
+    )
+    metric: Mapped[str] = mapped_column(Text)
+    period_start: Mapped[dt.date | None] = mapped_column(Date)
+    period_end: Mapped[dt.date] = mapped_column(Date)
+    value: Mapped[Decimal] = mapped_column(Numeric(20, 2))
+    unit: Mapped[str | None] = mapped_column(Text)
+    concept: Mapped[str] = mapped_column(Text)
+    locator: Mapped[str] = mapped_column(Text)
+    extractor_version: Mapped[str] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = _created_at()
     updated_at: Mapped[dt.datetime] = _updated_at()
 

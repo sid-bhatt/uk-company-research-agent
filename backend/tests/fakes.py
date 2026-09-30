@@ -49,15 +49,39 @@ class FakeCompaniesHouse:
         self.routes[f"/officers/{self.networked_officer}/appointments"] = kyb(
             "active_officer_appointments"
         )
+        # document_id → iXBRL bytes, or None for a PDF-only document. Unknown ids 404.
+        self.documents: dict[str, bytes | None] = {}
+
+    def accounts_document_ids(self, number: str) -> list[str]:
+        """Document ids of a company's accounts filings, newest first."""
+        items = self.routes[f"/company/{number}/filing-history"]["items"]
+        accounts = sorted(
+            (f for f in items if f["type"] == "AA"), key=lambda f: f["date"], reverse=True
+        )
+        return [f["links"]["document_metadata"].rsplit("/", 1)[-1] for f in accounts]
 
     def handler(self, request: httpx.Request) -> httpx.Response:
-        body = self.routes.get(request.url.path)
+        path = request.url.path
+        if path.startswith("/document/"):
+            return self._document(path)
+        body = self.routes.get(path)
         if body is None or body == {}:
             return httpx.Response(404, json={"errors": [{"error": "not-found"}]})
         # Fixtures hold one page; later pages come back empty, ending pagination.
         if int(request.url.params.get("start_index", 0)) > 0:
             body = {**body, "items": []}
         return httpx.Response(200, json=body)
+
+    def _document(self, path: str) -> httpx.Response:
+        parts = path.strip("/").split("/")  # document/{id}[/content]
+        doc_id = parts[1]
+        if doc_id not in self.documents:
+            return httpx.Response(404, json={"error": "not-found"})
+        content = self.documents[doc_id]
+        if len(parts) == 3:
+            return httpx.Response(200, content=content or b"%PDF-1.7")
+        resources = {"application/xhtml+xml": {}} if content else {"application/pdf": {}}
+        return httpx.Response(200, json={"resources": resources, "category": "accounts"})
 
     def client(self) -> CompaniesHouseClient:
         async def no_sleep(_: float) -> None:
