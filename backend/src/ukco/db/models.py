@@ -327,3 +327,86 @@ class IngestionRun(Base):
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[dt.datetime] = _created_at()
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# --- Decision data (reports, flags, reviews) --------------------------------------------
+
+REPORT_STATUSES = ("queued", "running", "succeeded", "failed")
+FLAG_DECISIONS = ("confirm", "dismiss")
+REPORT_DECISIONS = ("approve", "reject")
+
+
+class ReportRow(Base):
+    """One requested report: a job while it runs, the validated RiskReport once done."""
+
+    __tablename__ = "reports"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN (" + ", ".join(f"'{s}'" for s in REPORT_STATUSES) + ")",
+            name="ck_reports_status",
+        ),
+        Index("ix_reports_company_created", "company_number", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_number: Mapped[str] = mapped_column(String(8))  # no FK: queued before it's fetched
+    as_of: Mapped[dt.date | None] = mapped_column(Date)  # null = live
+    status: Mapped[str] = mapped_column(Text, server_default="queued")
+    requested_by: Mapped[str] = mapped_column(Text)
+    params: Mapped[dict[str, Any]] = mapped_column(server_default="{}")
+    payload: Mapped[dict[str, Any] | None]  # RiskReport JSON once succeeded
+    risk_score: Mapped[int | None] = mapped_column(Integer)
+    rules_version: Mapped[str | None] = mapped_column(Text)
+    policy_sha256: Mapped[str | None] = mapped_column(String(64))
+    model_id: Mapped[str | None] = mapped_column(Text)
+    prompt_version: Mapped[str | None] = mapped_column(Text)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created_at()
+    started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FlagRow(Base):
+    __tablename__ = "flags"
+    __table_args__ = (UniqueConstraint("report_id", "flag_key", name="uq_flags_report_key"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id", ondelete="CASCADE"))
+    flag_key: Mapped[str] = mapped_column(Text)  # F1, F2, … within the report
+    flag_type: Mapped[str] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(Text)
+    points: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(Text)
+    explanation: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    created_at: Mapped[dt.datetime] = _created_at()
+
+
+class Review(Base):
+    """Append-only audit trail (a trigger rejects UPDATE/DELETE). A flag decision has
+    flag_id set; a report decision doesn't. The current decision is the latest row."""
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "(flag_id IS NOT NULL AND decision IN ('confirm', 'dismiss')) OR "
+            "(flag_id IS NULL AND decision IN ('approve', 'reject'))",
+            name="ck_reviews_decision_matches_target",
+        ),
+        Index("ix_reviews_report_created", "report_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id", ondelete="RESTRICT"))
+    flag_id: Mapped[int | None] = mapped_column(ForeignKey("flags.id", ondelete="RESTRICT"))
+    decision: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    reviewer: Mapped[str] = mapped_column(Text)
+    # Copied from the report so each decision records exactly what the reviewer saw.
+    rules_version: Mapped[str | None] = mapped_column(Text)
+    policy_sha256: Mapped[str | None] = mapped_column(String(64))
+    model_id: Mapped[str | None] = mapped_column(Text)
+    prompt_version: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created_at()

@@ -58,6 +58,21 @@ make ingest-metadata  # companies, officers, filing history for the seed list
 make test
 ```
 
+Generate a report from the command line, or run the API:
+
+```bash
+cd backend && uv run ukco report 13235004    # → reports/13235004_<date>.md + .json
+make api                                     # → http://localhost:8000/docs
+```
+
+| Endpoint | |
+|---|---|
+| `POST /reports` | Queue a report (`{"company_number": "…", "as_of": "YYYY-MM-DD"?}`) → 202 |
+| `GET /reports/{id}/events` | Server-sent progress: queued → fetching → … → succeeded |
+| `GET /reports/{id}` | Status, the full cited report, current review decisions |
+| `POST /reports/{id}/reviews` | Confirm/dismiss a flag, approve/reject the report |
+| `GET /reports/{id}/reviews` | Append-only audit trail (UPDATE/DELETE blocked by a DB trigger) |
+
 ## Eval results
 
 _Coming in weeks 4–6._

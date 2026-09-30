@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate doctor ingest-metadata test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata api docker-build test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
@@ -16,6 +16,12 @@ migrate:          ## Apply database migrations
 
 ingest-metadata:  ## Fetch profiles, officers, filings for all seed companies (safe to re-run)
 	cd backend && uv run ukco ingest metadata
+
+api:              ## Run the API locally with reload (http://localhost:8000/docs)
+	cd backend && uv run uvicorn ukco.api.app:create_app --factory --reload
+
+docker-build:     ## Build the API image
+	docker build -t ukco-api:dev --build-arg GIT_SHA=$$(git rev-parse --short HEAD) backend
 
 doctor:           ## Check local setup
 	cd backend && uv run ukco doctor
