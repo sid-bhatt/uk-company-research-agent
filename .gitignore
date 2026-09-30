@@ -34,3 +34,6 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated reports (contain real company data)
+reports/

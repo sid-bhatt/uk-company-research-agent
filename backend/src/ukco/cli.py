@@ -329,5 +329,66 @@ def assess(
             typer.secho(f"  · {o.rule}: not assessed. {o.note}", dim=True)
 
 
+@app.command()
+def report(
+    company_number: str,
+    as_of: Annotated[
+        str | None, typer.Option("--as-of", help="Back-test date YYYY-MM-DD (default: today).")
+    ] = None,
+    network: Annotated[bool, typer.Option(help="Check directors' other companies.")] = True,
+    llm: Annotated[
+        bool, typer.Option(help="Add the LLM summary (needs ANTHROPIC_API_KEY).")
+    ] = True,
+    out: Annotated[Path, typer.Option(help="Directory for the JSON + Markdown report.")] = Path(
+        "../reports"
+    ),
+) -> None:
+    """Full KYB report: rules, citations validated against stored evidence, LLM narrative."""
+    import datetime as dt
+
+    from ukco.db import get_engine
+    from ukco.report import ReportInvalid, generate_report, render_markdown, writer_from_settings
+
+    writer = writer_from_settings() if llm else None
+
+    async def go():
+        async with client_from_settings() as client:
+            return await generate_report(
+                client,
+                get_engine(),
+                company_number,
+                as_of=dt.date.fromisoformat(as_of) if as_of else None,
+                network=network,
+                writer=writer,
+            )
+
+    try:
+        result = asyncio.run(go())
+    except ReportInvalid as exc:
+        typer.secho("✗ Report failed validation:", fg="red", err=True)
+        for problem in exc.problems:
+            typer.echo(f"  - {problem}", err=True)
+        raise typer.Exit(code=2) from exc
+    except (CompaniesHouseError, ValueError) as exc:
+        typer.secho(f"✗ {exc}", fg="red", err=True)
+        raise typer.Exit(code=1) from exc
+
+    out.mkdir(parents=True, exist_ok=True)
+    stem = out / f"{result.company.company_number}_{result.as_of}"
+    stem.with_suffix(".json").write_text(result.model_dump_json(indent=2))
+    stem.with_suffix(".md").write_text(render_markdown(result))
+    p = result.provenance
+    typer.secho(
+        f"{result.company.name}: risk {result.risk_score}/100, {len(result.flags)} flag(s), "
+        f"{len(result.evidence)} citations validated",
+        bold=True,
+    )
+    narrative = p.narrative_status + (f" ({p.narrative_note})" if p.narrative_note else "")
+    if p.llm:
+        narrative += f", ${p.llm.cost_usd:.4f}, {p.llm.latency_ms} ms"
+    typer.echo(f"narrative: {narrative}")
+    typer.echo(f"→ {stem.with_suffix('.md')}\n→ {stem.with_suffix('.json')}")
+
+
 if __name__ == "__main__":
     app()

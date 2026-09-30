@@ -4,7 +4,7 @@ Enter a UK company number and get a **structured, cited risk report** that a com
 analyst reviews and approves: the Know-Your-Business check fintechs run before onboarding
 a business customer.
 
-**Status:** 🚧 Week 1 of 3 toward a deployed v1. See [docs/PLAN.md](docs/PLAN.md).
+**Status:** 🚧 Week 2 of 3 toward a deployed v1: reports work end to end from the CLI (`ukco report <number>`). See [docs/PLAN.md](docs/PLAN.md).
 
 ## What the report contains
 1. **Snapshot:** status, age, SIC codes, registered-office history, officers, people with significant control.

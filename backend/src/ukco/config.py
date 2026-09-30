@@ -5,6 +5,7 @@ place to see what the app needs in order to run.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,15 @@ class Settings(BaseSettings):
     # Requests per 5-minute window; Companies House allows 600 per key.
     companies_house_rate_limit: int = 550
     cache_dir: str = ".cache"
+
+    # LLM narrative (summary + flag explanations). Optional: reports are complete without it.
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = "claude-opus-5-5"
+    # Short grounded writing; raise only if evals show it helps.
+    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+
+    # Recorded on every report so a decision can be traced to the exact code that made it.
+    git_sha: str = "dev"
 
 
 @lru_cache
