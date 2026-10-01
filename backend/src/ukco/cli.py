@@ -351,9 +351,11 @@ def report(
     import datetime as dt
 
     from ukco.db import get_engine
+    from ukco.observability import setup_tracing, shutdown_tracing
     from ukco.report import ReportInvalid, generate_report, render_markdown, writer_from_settings
 
     writer = writer_from_settings() if llm else None
+    setup_tracing("ukco-cli")
 
     async def go():
         async with client_from_settings() as client:
@@ -368,6 +370,7 @@ def report(
 
     try:
         result = asyncio.run(go())
+        shutdown_tracing()
     except ReportInvalid as exc:
         typer.secho("✗ Report failed validation:", fg="red", err=True)
         for problem in exc.problems:
@@ -391,7 +394,19 @@ def report(
     if p.llm:
         narrative += f", ${p.llm.cost_usd:.4f}, {p.llm.latency_ms} ms"
     typer.echo(f"narrative: {narrative}")
+    timings = ", ".join(f"{k} {v}ms" for k, v in p.timings_ms.items())
+    typer.echo(f"timings: {timings}; Companies House requests: {p.companies_house_requests}")
+    if p.trace_id:
+        typer.echo(f"trace: {p.trace_id}")
     typer.echo(f"→ {stem.with_suffix('.md')}\n→ {stem.with_suffix('.json')}")
+
+
+@app.command()
+def mcp() -> None:
+    """Run the KYB MCP server over stdio (for Claude Desktop / Claude Code)."""
+    from ukco.mcp_server.server import main
+
+    main()
 
 
 @evals.command("build")

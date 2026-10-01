@@ -15,11 +15,11 @@ def test_version_command() -> None:
 
 def test_settings_read_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db:5432/x")
-    monkeypatch.setenv("COMPANIES_HOUSE_API_KEY", "secret")
+    monkeypatch.setenv("COMPANIES_HOUSE_API_KEY", "fake-credential-for-tests")
     settings = Settings()
     assert settings.database_url == "postgresql://u:p@db:5432/x"
     assert settings.companies_house_api_key is not None
-    assert "secret" not in repr(settings)  # secrets never leak into logs
+    assert "fake-credential-for-tests" not in repr(settings)  # secrets never leak into logs
 
 
 @pytest.mark.integration

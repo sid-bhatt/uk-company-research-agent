@@ -32,6 +32,7 @@ from ukco.api.schemas import (
 from ukco.companies_house import CompaniesHouseClient, client_from_settings
 from ukco.config import get_settings
 from ukco.db import get_engine
+from ukco.observability import setup_tracing, shutdown_tracing
 from ukco.report import render_markdown, store
 from ukco.report.narrative import NarrativeWriter
 from ukco.report.pipeline import writer_from_settings
@@ -55,12 +56,14 @@ def create_app(
         narrator = (
             writer if writer is not None or not use_settings_writer else writer_from_settings()
         )
+        setup_tracing("ukco-api")
         store.fail_interrupted(eng)
         _install(app, eng, ch, narrator)
         yield
         await app.state.runner.drain()
         if owns_client:
             await ch.aclose()
+        shutdown_tracing()
 
     app = FastAPI(title="KYB Due-Diligence Agent", version=__version__, lifespan=lifespan)
     if engine is not None and client is not None:  # tests: no lifespan needed
@@ -120,7 +123,9 @@ def _routes(app: FastAPI) -> None:
             params=body.model_dump(mode="json"),
         )
         request.app.state.runner.submit(
-            JobRequest(report_id, body.company_number, body.as_of, body.network, body.narrative)
+            JobRequest(
+                report_id, body.company_number, body.as_of, body.network, body.narrative, user
+            )
         )
         return ReportCreated(
             id=report_id,

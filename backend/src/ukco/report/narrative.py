@@ -16,8 +16,10 @@ from typing import Any, Literal, Protocol
 
 import anthropic
 from anthropic.types.beta import BetaOutputConfigParam
+from opentelemetry import trace
 from pydantic import ValidationError
 
+from ukco.observability import record_generation, tracer
 from ukco.report.schema import LlmRun, Narrative, RiskReport
 from ukco.report.validate import narrative_problems
 
@@ -116,12 +118,23 @@ class ClaudeNarrativeWriter:
             "effort": self.effort,
             "format": {"type": "json_schema", "schema": NARRATIVE_SCHEMA},
         }
+        prompt = narrative_input(report)
         started = time.perf_counter()
+        with tracer().start_as_current_span("narrative.generate") as span:
+            return await self._generate(span, prompt, output_config, started)
+
+    async def _generate(
+        self,
+        span: trace.Span,
+        prompt: str,
+        output_config: BetaOutputConfigParam,
+        started: float,
+    ) -> tuple[Narrative, LlmRun]:
         response = await self.client.beta.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": narrative_input(report)}],
+            messages=[{"role": "user", "content": prompt}],
             output_config=output_config,
             # A safety decline is re-run on Anthropic's recommended fallback model.
             betas=[FALLBACK_BETA],
@@ -147,6 +160,16 @@ class ClaudeNarrativeWriter:
         usage = response.usage
         price_in, price_out = PRICING.get(self.model, (0.0, 0.0))
         cost = (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1_000_000
+        record_generation(
+            span,
+            model=self.model,
+            served_by=response.model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost_usd=cost,
+            prompt=prompt,
+            completion=text,
+        )
         return narrative, LlmRun(
             model=self.model,
             prompt_version=PROMPT_VERSION,

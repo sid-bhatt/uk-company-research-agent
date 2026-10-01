@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # Short grounded writing; raise only if evals show it helps.
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
+    # Tracing (OpenTelemetry → Langfuse). Off unless keys or an OTLP endpoint are set.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+    otel_exporter_otlp_endpoint: str | None = None
+    trace_content: bool = False  # export prompts/completions (they name officers): opt in
+
     # Recorded on every report so a decision can be traced to the exact code that made it.
     git_sha: str = "dev"
 

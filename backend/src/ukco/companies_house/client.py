@@ -128,6 +128,7 @@ class CompaniesHouseClient:
         self._retry = retry or RetryPolicy()
         self._sleep = sleep
         self.on_json = on_json
+        self.requests = 0  # network calls made (cache hits don't count): cost per report
         # API key goes in as HTTP Basic username with an empty password.
         self._http = httpx.AsyncClient(
             auth=(api_key, ""),
@@ -404,6 +405,7 @@ class CompaniesHouseClient:
         while True:
             attempt += 1
             await self._limiter.acquire()
+            self.requests += 1
             try:
                 response = await self._http.get(url, params=params, headers=headers)
             except httpx.TransportError as exc:

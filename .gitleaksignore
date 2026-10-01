@@ -1,0 +1,3 @@
+# False positive: a made-up test value ("k3y-v4lue-9f2c") in the settings-redaction test,
+# replaced with an obviously fake one in the next commit. Not a credential.
+49042052cc938c82c25ad7355a063a4e4c7d24a5:backend/tests/test_smoke.py:generic-api-key:18

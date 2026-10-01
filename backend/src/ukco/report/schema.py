@@ -116,6 +116,9 @@ class Provenance(BaseModel):
     llm: LlmRun | None = None
     narrative_status: Literal["ok", "disabled", "rejected", "failed"] = "disabled"
     narrative_note: str | None = None  # why disabled/rejected/failed
+    timings_ms: dict[str, int] = {}  # per pipeline stage
+    companies_house_requests: int | None = None  # network calls (cache hits excluded)
+    trace_id: str | None = None  # OpenTelemetry trace id (links to Langfuse)
 
 
 class RiskReport(BaseModel):

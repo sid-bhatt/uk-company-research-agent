@@ -73,6 +73,15 @@ make api                                     # → http://localhost:8000/docs
 | `POST /reports/{id}/reviews` | Confirm/dismiss a flag, approve/reject the report |
 | `GET /reports/{id}/reviews` | Append-only audit trail (UPDATE/DELETE blocked by a DB trigger) |
 
+## Assistants (MCP) and observability
+
+- **MCP server:** `uv run ukco mcp` exposes `search_companies`, `get_risk_report`,
+  `get_flag_evidence` and `officer_network` to Claude Desktop / Claude Code. Setup: [docs/mcp.md](docs/mcp.md).
+- **Tracing:** OpenTelemetry, exported to Langfuse (or any OTLP backend) when keys are set. One
+  trace per report, with a span per stage and the LLM call as a generation (model, tokens,
+  cost). Every report also records its own stage timings, Companies House request count and
+  trace id. Prompt content isn't exported unless `TRACE_CONTENT=true` (it names officers).
+
 ## Eval results
 
 Scored **as of 30 Sep 2024** using only what was known then; outcome = compulsory strike-off

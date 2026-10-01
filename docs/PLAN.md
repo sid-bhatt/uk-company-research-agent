@@ -26,7 +26,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | 8 | `RiskReport` Pydantic schema, scoring, report assembler, citation validator. LLM summary + per-flag explanations via structured output, citing only given evidence IDs. `ukco report <number>` → JSON + Markdown. | ✅ |
 | 9 | FastAPI: `POST /reports` (background job + SSE progress), `GET /reports/{id}`, `POST /reviews` (append-only audit). Persist reports/flags. Dockerfile. | ✅ |
 | 10 | Eval set v0: 30 companies from advanced search (healthy + known outcomes), frozen snapshot, runner: rule fidelity vs hand labels, point-in-time outcome metrics, cost/latency. Baseline in README. | ✅ |
-| 11 | MCP server (tools: `get_risk_report`, `get_flag_evidence`, `search_companies`, `officer_network`). Langfuse tracing on LLM calls. Buffer. | ☐ |
+| 11 | MCP server (tools: `get_risk_report`, `get_flag_evidence`, `search_companies`, `officer_network`). Langfuse tracing on LLM calls. Buffer. | ✅ |
 | 12 | Next.js scaffold, Auth.js (GitHub), report page: snapshot, score breakdown, flags by severity, citation links to Companies House / document page. | ☐ |
 
 ## Week 3: review UI + AWS

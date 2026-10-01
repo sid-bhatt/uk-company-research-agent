@@ -71,6 +71,7 @@ class JobRequest:
     as_of: dt.date | None
     network: bool
     narrative: bool
+    requested_by: str | None = None
 
 
 class JobRunner:
@@ -111,6 +112,7 @@ class JobRunner:
                     network=job.network,
                     writer=self.writer if job.narrative else None,
                     on_stage=lambda stage: self.hub.publish(rid, "stage", stage=stage),
+                    requested_by=job.requested_by,
                 )
                 store.save_success(self.engine, rid, report)
                 self.hub.publish(
