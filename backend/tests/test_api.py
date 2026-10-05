@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
+from tests.conftest import load_fixture
 from tests.fakes import ACTIVE
 from tests.test_report import troubled_company
 from ukco.api.app import create_app
@@ -22,6 +23,7 @@ pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 @pytest.fixture
 async def api(engine: Engine) -> AsyncIterator[tuple[httpx.AsyncClient, FastAPI]]:
     ch = troubled_company()
+    ch.routes["/search/companies"] = load_fixture("search_greggs")
     async with ch.client() as client:
         app = create_app(engine=engine, client=client, writer=None, use_settings_writer=False)
         transport = httpx.ASGITransport(app=app)
@@ -168,3 +170,105 @@ async def test_jobs_interrupted_by_a_restart_are_marked_failed(engine: Engine) -
 async def test_health(api) -> None:
     http, _ = api
     assert (await http.get("/health")).json()["status"] == "ok"
+
+
+# --- Auth: the web app's signed tokens -----------------------------------------------
+
+SECRET = "test-signing-secret-at-least-32-bytes!"
+
+
+def token(**overrides: Any) -> str:
+    import time
+
+    import jwt
+
+    now = int(time.time())
+    claims = {
+        "sub": "github:analyst",
+        "iss": "ukco-web",
+        "aud": "ukco-api",
+        "iat": now,
+        "exp": now + 300,
+    }
+    return jwt.encode({**claims, **overrides}, SECRET, algorithm="HS256")
+
+
+@pytest.fixture
+def jwt_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import SecretStr
+
+    from ukco.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "api_jwt_secret", SecretStr(SECRET))
+
+
+@pytest.mark.usefixtures("jwt_required")
+async def test_signed_token_identifies_the_user(api) -> None:
+    http, app = api
+    created = await http.post(
+        "/reports", json={"company_number": ACTIVE}, headers={"Authorization": f"Bearer {token()}"}
+    )
+    assert created.status_code == 202
+    await app.state.runner.drain()
+    detail = await http.get(
+        f"/reports/{created.json()['id']}", headers={"Authorization": f"Bearer {token()}"}
+    )
+    assert detail.json()["requested_by"] == "github:analyst"
+
+
+@pytest.mark.usefixtures("jwt_required")
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"X-User": "someone-claiming-to-be-an-analyst"},
+        {"Authorization": "Bearer not-a-jwt"},
+        {"Authorization": f"Bearer {token(exp=1)}"},
+        {"Authorization": f"Bearer {token(aud='someone-else')}"},
+        {"Authorization": f"Bearer {token(iss='attacker')}"},
+    ],
+    ids=["no-token", "x-user-ignored", "garbage", "expired", "wrong-audience", "wrong-issuer"],
+)
+async def test_requests_without_a_valid_token_are_rejected(api, headers: dict[str, str]) -> None:
+    http, _ = api
+    assert (await http.get("/reports", headers=headers)).status_code == 401
+
+
+@pytest.mark.usefixtures("jwt_required")
+async def test_token_signed_with_another_secret_is_rejected(api) -> None:
+    import time
+
+    import jwt
+
+    http, _ = api
+    now = int(time.time())
+    forged = jwt.encode(
+        {"sub": "x", "iss": "ukco-web", "aud": "ukco-api", "iat": now, "exp": now + 60},
+        "a-different-secret-that-is-long-enough",
+        algorithm="HS256",
+    )
+    assert (
+        await http.get("/reports", headers={"Authorization": f"Bearer {forged}"})
+    ).status_code == 401
+
+
+async def test_company_search(api) -> None:
+    http, _ = api
+    hits = (await http.get("/companies/search", params={"q": "greggs"})).json()
+    assert hits[0] == {
+        "company_number": "00502851",
+        "name": "GREGGS PLC",
+        "status": "active",
+        "incorporated": "1951-12-29",
+        "address": hits[0]["address"],
+    }
+
+
+def test_committed_openapi_schema_matches_the_api() -> None:
+    """The web app's TypeScript types are generated from this file; regenerate with
+    `uv run ukco openapi && (cd ../web && npm run gen:api)` when the API changes."""
+    from pathlib import Path
+
+    committed = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "api" / "openapi.json"
+    current = json.loads(json.dumps(create_app().openapi(), sort_keys=True))
+    assert json.loads(committed.read_text()) == current, "API changed: regenerate the web types"

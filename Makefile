@@ -1,7 +1,8 @@
-.PHONY: setup up down migrate doctor ingest-metadata api docker-build test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
+	cd web && npm install
 	cd backend && uv run pre-commit install --config ../.pre-commit-config.yaml
 	@test -f .env || (cp .env.example .env && echo "Created .env — add your Companies House key")
 
@@ -19,6 +20,13 @@ ingest-metadata:  ## Fetch profiles, officers, filings for all seed companies (s
 
 api:              ## Run the API locally with reload (http://localhost:8000/docs)
 	cd backend && uv run uvicorn ukco.api.app:create_app --factory --reload
+
+web:              ## Run the web app (http://localhost:3000); needs `make api` running
+	cd web && npm run dev
+
+api-types:        ## Regenerate the web app's TypeScript types after an API change
+	cd backend && uv run ukco openapi
+	cd web && npm run gen:api
 
 docker-build:     ## Build the API image
 	docker build -t ukco-api:dev --build-arg GIT_SHA=$$(git rev-parse --short HEAD) backend

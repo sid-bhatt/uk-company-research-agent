@@ -4,7 +4,7 @@ Enter a UK company number and get a **structured, cited risk report** that a com
 analyst reviews and approves: the Know-Your-Business check fintechs run before onboarding
 a business customer.
 
-**Status:** 🚧 Week 2 of 3 toward a deployed v1: reports work end to end from the CLI (`ukco report <number>`). See [docs/PLAN.md](docs/PLAN.md).
+**Status:** 🚧 Week 2 of 3 toward a deployed v1: reports work end to end in the web app, API, CLI and MCP. See [docs/PLAN.md](docs/PLAN.md).
 
 ## What the report contains
 1. **Snapshot:** status, age, SIC codes, registered-office history, officers, people with significant control.
@@ -58,7 +58,14 @@ make ingest-metadata  # companies, officers, filing history for the seed list
 make test
 ```
 
-Generate a report from the command line, or run the API:
+Run the web app (sign in with the local dev login, then search for a company):
+
+```bash
+make api        # terminal 1: API on :8000
+make web        # terminal 2: web app on :3000 (copy web/.env.example to web/.env.local first)
+```
+
+Or generate a report from the command line, or use the API directly:
 
 ```bash
 cd backend && uv run ukco report 13235004    # → reports/13235004_<date>.md + .json

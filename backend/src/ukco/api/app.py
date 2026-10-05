@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
+import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import Engine, text
@@ -22,6 +23,7 @@ from sqlalchemy import Engine, text
 from ukco import __version__
 from ukco.api.jobs import JobRequest, JobRunner, ProgressHub
 from ukco.api.schemas import (
+    CompanyHit,
     CreateReportRequest,
     ReportCreated,
     ReportDetail,
@@ -29,7 +31,7 @@ from ukco.api.schemas import (
     ReviewOut,
     ReviewRequest,
 )
-from ukco.companies_house import CompaniesHouseClient, client_from_settings
+from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError, client_from_settings
 from ukco.config import get_settings
 from ukco.db import get_engine
 from ukco.observability import setup_tracing, shutdown_tracing
@@ -76,17 +78,41 @@ def _install(
     app: FastAPI, engine: Engine, client: CompaniesHouseClient, writer: NarrativeWriter | None
 ) -> None:
     app.state.engine = engine
+    app.state.client = client
     app.state.hub = ProgressHub()
     app.state.runner = JobRunner(engine, client, writer, app.state.hub)
 
 
-def current_user(x_user: Annotated[str | None, Header()] = None) -> str:
-    """Who is acting. Local dev trusts an `X-User` header; Day 12 replaces this with the
-    verified identity from the frontend's session token."""
-    if x_user:
-        return x_user.strip()[:200]
-    if get_settings().env == "local":
-        return "local-dev"
+JWT_ISSUER, JWT_AUDIENCE = "ukco-web", "ukco-api"
+
+
+def current_user(
+    authorization: Annotated[str | None, Header()] = None,
+    x_user: Annotated[str | None, Header()] = None,
+) -> str:
+    """Who is acting. With API_JWT_SECRET set, a valid token from the web app is required
+    (the web app authenticates the person, then signs a short-lived token naming them).
+    Without it, only local development trusts an `X-User` header."""
+    settings = get_settings()
+    secret = settings.api_jwt_secret
+    if secret is not None:
+        scheme, _, token = (authorization or "").partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bearer token required")
+        try:
+            claims = jwt.decode(
+                token,
+                secret.get_secret_value(),
+                algorithms=["HS256"],
+                audience=JWT_AUDIENCE,
+                issuer=JWT_ISSUER,
+                options={"require": ["exp", "iat", "sub"]},
+            )
+        except jwt.PyJWTError as exc:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {exc}") from exc
+        return str(claims["sub"])[:200]
+    if settings.env == "local":
+        return (x_user or "local-dev").strip()[:200]
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication required")
 
 
@@ -110,6 +136,29 @@ def _routes(app: FastAPI) -> None:
         with _engine(request).connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ok", "version": __version__}
+
+    @app.get("/companies/search")
+    async def search_companies(
+        request: Request,
+        _: User,
+        q: Annotated[str, Query(min_length=1, max_length=160)],
+        limit: Annotated[int, Query(ge=1, le=20)] = 8,
+    ) -> list[CompanyHit]:
+        client: CompaniesHouseClient = request.app.state.client
+        try:
+            result = await client.search_companies(q, limit=limit)
+        except CompaniesHouseError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Companies House: {exc}") from exc
+        return [
+            CompanyHit(
+                company_number=c.company_number,
+                name=c.title,
+                status=c.company_status,
+                incorporated=c.date_of_creation,
+                address=c.address_snippet,
+            )
+            for c in result.items
+        ]
 
     @app.post("/reports", status_code=status.HTTP_202_ACCEPTED)
     async def create_report(

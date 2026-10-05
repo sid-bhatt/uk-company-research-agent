@@ -27,7 +27,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | 9 | FastAPI: `POST /reports` (background job + SSE progress), `GET /reports/{id}`, `POST /reviews` (append-only audit). Persist reports/flags. Dockerfile. | ✅ |
 | 10 | Eval set v0: 30 companies from advanced search (healthy + known outcomes), frozen snapshot, runner: rule fidelity vs hand labels, point-in-time outcome metrics, cost/latency. Baseline in README. | ✅ |
 | 11 | MCP server (tools: `get_risk_report`, `get_flag_evidence`, `search_companies`, `officer_network`). Langfuse tracing on LLM calls. Buffer. | ✅ |
-| 12 | Next.js scaffold, Auth.js (GitHub), report page: snapshot, score breakdown, flags by severity, citation links to Companies House / document page. | ☐ |
+| 12 | Next.js scaffold, Auth.js (GitHub), report page: snapshot, score breakdown, flags by severity, citation links to Companies House / document page. | ✅ |
 
 ## Week 3: review UI + AWS
 | Day | Tasks | Done |
@@ -40,7 +40,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | 18 | Smoke test on 5 real companies, README v0 (architecture diagram, sample report screenshot, eval baseline, trade-offs), demo GIF. **Ship.** | ☐ |
 
 ## Weeks 4–6: evals + observability + pipeline
-- **Beat the Day 10 baseline (AUC 0.68):** leading indicators (late-filing history, persistent net liabilities, no/dormant accounts in year 2), `RP05` move to the Companies House default address; human rule-fidelity labels.
+- **Beat the Day 10 baseline (AUC 0.68):** leading indicators (late-filing history, persistent net liabilities, no/dormant accounts in year 2), `RP05` move to the Companies House default address; director churn relative to board size (Greggs, a FTSE 250 board, is flagged for 4 changes in 12 months: normal rotation); human rule-fidelity labels.
 - Eval set to ~100 companies; **evals on every PR** (frozen snapshot, no live API), results table posted as PR comment + README.
 - Financial-extraction accuracy vs hand-checked figures; PDF-only fallback (OCR balance-sheet pages + LLM extraction, [ADR-003](adr/0003-ocr-for-filing-documents.md)).
 - Langfuse dashboards: cost and latency per report.

@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str | None = None
     trace_content: bool = False  # export prompts/completions (they name officers): opt in
 
+    # Shared secret the web app signs short-lived user tokens with (HS256). When set, the API
+    # requires them; when unset, only `local` accepts the X-User header.
+    api_jwt_secret: SecretStr | None = None
+
     # Recorded on every report so a decision can be traced to the exact code that made it.
     git_sha: str = "dev"
 

@@ -32,6 +32,14 @@ class CreateReportRequest(BaseModel):
         return value
 
 
+class CompanyHit(BaseModel):
+    company_number: str
+    name: str
+    status: str | None
+    incorporated: dt.date | None
+    address: str | None
+
+
 class ReportCreated(BaseModel):
     id: int
     status: str

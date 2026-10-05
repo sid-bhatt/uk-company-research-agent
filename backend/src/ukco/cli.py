@@ -402,6 +402,20 @@ def report(
 
 
 @app.command()
+def openapi(
+    out: Annotated[Path, typer.Option(help="Write the API's OpenAPI schema here.")] = Path(
+        "../web/src/lib/api/openapi.json"
+    ),
+) -> None:
+    """Export the OpenAPI schema the web app's TypeScript types are generated from."""
+    from ukco.api.app import create_app
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(create_app().openapi(), indent=2, sort_keys=True) + "\n")
+    typer.echo(f"→ {out}")
+
+
+@app.command()
 def mcp() -> None:
     """Run the KYB MCP server over stdio (for Claude Desktop / Claude Code)."""
     from ukco.mcp_server.server import main

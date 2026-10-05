@@ -2,10 +2,11 @@
 
 import datetime as dt
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from ukco.config import get_settings
-from ukco.evidence import Citation, EvidenceIndex
+from ukco.evidence import Citation, EvidenceIndex, resolve_pointer
 from ukco.ingest.company import CompanyBundle
 from ukco.report.schema import (
     CheckResult,
@@ -48,27 +49,68 @@ _PATH_LABELS = (
 _CONCEPT = re.compile(r"name=([\w-]+:[\w-]+)")
 
 
-def describe(c: Citation) -> str:
+def _when(value: object) -> str:
+    return str(value)[:10] if value else "?"
+
+
+def _item_label(path: str, item: dict[str, Any]) -> str | None:
+    """What a single cited record says, in words an analyst can scan."""
+    if path.endswith("/officers"):
+        resigned = f", resigned {_when(item.get('resigned_on'))}" if item.get("resigned_on") else ""
+        return (
+            f"Officer: {item.get('name')} ({item.get('officer_role')}, "
+            f"appointed {_when(item.get('appointed_on'))}{resigned})"
+        )
+    if path.endswith("/filing-history"):
+        description = str(item.get("description") or "").replace("-", " ")
+        return f"Filing {item.get('type')} on {_when(item.get('date'))}: {description}"[:140]
+    if path.endswith("/persons-with-significant-control"):
+        ceased = f", ceased {_when(item.get('ceased_on'))}" if item.get("ceased_on") else ""
+        who = item.get("name") or item.get("kind")
+        return f"PSC: {who} (notified {_when(item.get('notified_on'))}{ceased})"
+    if path.endswith("/persons-with-significant-control-statements"):
+        return f"PSC statement: {str(item.get('statement', '')).replace('-', ' ')}"
+    if path.endswith("/appointments"):
+        to = item.get("appointed_to") or {}
+        return f"Other appointment: {to.get('company_name')} ({to.get('company_status')})"
+    return None
+
+
+def describe(c: Citation, bodies: Mapping[int, Any] | None = None) -> str:
+    """A human label for a citation, from the record it points at when we have it."""
     if c.kind == "document":
         m = _CONCEPT.search(c.pointer)
         return f"Filed accounts, {m.group(1) if m else c.pointer}"
     base = next((label for pattern, label in _PATH_LABELS if pattern.match(c.path)), c.path)
-    return f"{base} {c.pointer}".strip()
+    body = bodies.get(c.snapshot_id) if bodies and c.snapshot_id is not None else None
+    if body is not None and c.pointer.startswith("/items/"):
+        try:
+            item = resolve_pointer(body, c.pointer)
+        except (KeyError, IndexError, TypeError):
+            item = None
+        if isinstance(item, dict) and (label := _item_label(c.path, item)):
+            return label
+    if c.pointer and not c.pointer.startswith("/items/"):
+        return f"{base}: {c.pointer.strip('/').replace('_', ' ')}"
+    return base
 
 
 class EvidenceRegistry:
     """Numbers citations E1, E2, … in order of first use; identical citations share an id."""
 
-    def __init__(self) -> None:
+    def __init__(self, bodies: Mapping[int, Any] | None = None) -> None:
         self.items: list[EvidenceItem] = []
         self._ids: dict[tuple[str, str, str], str] = {}
+        self._bodies = bodies
 
     def add(self, c: Citation, label: str | None = None) -> str:
         key = (c.kind, str(c.snapshot_id or c.document_id), c.pointer)
         if key not in self._ids:
             eid = f"E{len(self.items) + 1}"
             self._ids[key] = eid
-            self.items.append(EvidenceItem(id=eid, label=label or describe(c), citation=c))
+            self.items.append(
+                EvidenceItem(id=eid, label=label or describe(c, self._bodies), citation=c)
+            )
         return self._ids[key]
 
 
@@ -161,7 +203,10 @@ def build_report(
     ingestion_run_id: int | None = None,
     snapshot_ids: Sequence[int] = (),
 ) -> RiskReport:
-    reg = EvidenceRegistry()
+    # Snapshot ids line up with the bundle's responses (persist_bundle stores them in order).
+    reg = EvidenceRegistry(
+        dict(zip(snapshot_ids, (r.body for r in bundle.responses), strict=False))
+    )
     snapshot = _snapshot(bundle, evidence, assessment.as_of, assessment.live, reg)
 
     ordered = sorted(

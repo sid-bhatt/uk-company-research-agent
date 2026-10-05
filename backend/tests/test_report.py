@@ -101,6 +101,8 @@ async def test_report_is_complete_valid_and_cited(engine: Engine) -> None:
     assert report.provenance.ingestion_run_id and report.provenance.snapshot_ids
     assert report.provenance.narrative_status == "disabled"
     assert validate_report(report, DbEvidenceStore(engine)) == []
+    # Labels say what the record is, never a raw JSON pointer.
+    assert not [e.label for e in report.evidence if "/items/" in e.label]
 
     md = render_markdown(report)
     assert "Financial deterioration" in md and "Risk score 15/100" in md
