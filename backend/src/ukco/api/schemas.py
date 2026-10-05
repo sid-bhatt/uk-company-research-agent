@@ -58,6 +58,7 @@ class ReportSummary(BaseModel):
     created_at: dt.datetime
     started_at: dt.datetime | None
     finished_at: dt.datetime | None
+    review_status: Literal["approve", "reject"] | None = None  # current report decision
 
 
 class ReviewRequest(BaseModel):

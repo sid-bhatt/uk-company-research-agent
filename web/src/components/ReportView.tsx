@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { EvidenceItem, ReportFlag, ReviewOut, RiskReport } from "@/lib/api/types";
 import { METRIC_LABELS, RULE_LABELS, SEVERITY_ORDER, date, money, scoreBand } from "@/lib/format";
 
@@ -54,11 +56,13 @@ function FlagCard({
   evidence,
   whyItMatters,
   decision,
+  actions,
 }: {
   flag: ReportFlag;
   evidence: Map<string, EvidenceItem>;
   whyItMatters?: string;
   decision?: ReviewOut;
+  actions?: ReactNode;
 }) {
   return (
     <article
@@ -70,7 +74,7 @@ function FlagCard({
         <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">{flag.title}</h3>
         <SeverityBadge severity={flag.severity} />
         <span className="text-xs text-zinc-500">+{flag.points} points</span>
-        {decision && (
+        {decision && !actions && (
           <span className="ml-auto rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             {decision.decision === "confirm" ? "Confirmed" : "Dismissed"} by {decision.reviewer}
           </span>
@@ -84,6 +88,7 @@ function FlagCard({
         </p>
       )}
       <EvidenceLinks ids={flag.evidence_ids} evidence={evidence} />
+      {actions}
     </article>
   );
 }
@@ -138,9 +143,12 @@ function Financials({ report, evidence }: { report: RiskReport; evidence: Map<st
 export function ReportView({
   report,
   decisions = {},
+  flagActions,
 }: {
   report: RiskReport;
   decisions?: Record<string, ReviewOut>;
+  /** Review controls rendered under each flag (the report page passes them in). */
+  flagActions?: (flag: ReportFlag) => ReactNode;
 }) {
   const evidence = new Map(report.evidence.map((e) => [e.id, e]));
   const flags = [...report.flags].sort(
@@ -186,7 +194,7 @@ export function ReportView({
         ) : (
           <div className="mt-3 space-y-3">
             {flags.map((f) => (
-              <FlagCard key={f.id} flag={f} evidence={evidence} whyItMatters={why.get(f.id)} decision={decisions[f.id]} />
+              <FlagCard key={f.id} flag={f} evidence={evidence} whyItMatters={why.get(f.id)} decision={decisions[f.id]} actions={flagActions?.(f)} />
             ))}
           </div>
         )}

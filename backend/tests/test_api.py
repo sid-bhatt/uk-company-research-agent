@@ -272,3 +272,36 @@ def test_committed_openapi_schema_matches_the_api() -> None:
     committed = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "api" / "openapi.json"
     current = json.loads(json.dumps(create_app().openapi(), sort_keys=True))
     assert json.loads(committed.read_text()) == current, "API changed: regenerate the web types"
+
+
+# --- Review rules (enforced by the API, not just the UI) ----------------------------------
+
+
+async def test_dismissing_a_flag_or_rejecting_a_report_needs_a_reason(api) -> None:
+    http, app = api
+    reviews = f"/reports/{(await create_and_finish(http, app))['id']}/reviews"
+
+    no_reason = await http.post(reviews, json={"flag_id": "F1", "decision": "dismiss"})
+    assert no_reason.status_code == 422 and "needs a reason" in no_reason.text
+    too_short = await http.post(
+        reviews, json={"flag_id": "F1", "decision": "dismiss", "note": "ok"}
+    )
+    assert too_short.status_code == 422
+    assert (await http.post(reviews, json={"decision": "reject", "note": " "})).status_code == 422
+    confirm = await http.post(reviews, json={"flag_id": "F1", "decision": "confirm"})
+    assert confirm.status_code == 201  # confirming a flag needs no justification
+
+
+async def test_a_report_cannot_be_approved_with_unreviewed_flags(api) -> None:
+    http, app = api
+    rid = (await create_and_finish(http, app))["id"]
+    reviews = f"/reports/{rid}/reviews"
+
+    early = await http.post(reviews, json={"decision": "approve"})
+    assert early.status_code == 409 and "pending: F1" in early.text
+    await http.post(reviews, json={"flag_id": "F1", "decision": "confirm"})
+    assert (await http.post(reviews, json={"decision": "approve"})).status_code == 201
+
+    listed = (await http.get("/reports")).json()
+    assert listed[0]["review_status"] == "approve"
+    assert (await http.get(f"/reports/{rid}")).json()["review_status"] == "approve"

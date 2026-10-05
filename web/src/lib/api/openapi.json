@@ -839,6 +839,21 @@
             "title": "Requested By",
             "type": "string"
           },
+          "review_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "approve",
+                  "reject"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Status"
+          },
           "risk_score": {
             "anyOf": [
               {
@@ -1008,6 +1023,21 @@
           "requested_by": {
             "title": "Requested By",
             "type": "string"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "approve",
+                  "reject"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Status"
           },
           "risk_score": {
             "anyOf": [

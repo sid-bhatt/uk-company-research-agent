@@ -8,7 +8,7 @@ import "server-only";
 import { SignJWT } from "jose";
 
 import { auth } from "@/auth";
-import type { CompanyHit, ReportDetail, ReportSummary } from "./types";
+import type { CompanyHit, ReportDetail, ReportSummary, ReviewOut } from "./types";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
@@ -60,6 +60,13 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ company_number: companyNumber, ...(asOf ? { as_of: asOf } : {}) }),
+    }),
+  listReviews: (id: number) => json<ReviewOut[]>(`/reports/${id}/reviews`),
+  addReview: (id: number, body: { flag_id?: string; decision: string; note?: string }) =>
+    json<ReviewOut>(`/reports/${id}/reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     }),
   searchCompanies: (q: string) =>
     json<CompanyHit[]>(`/companies/search?q=${encodeURIComponent(q)}&limit=8`),

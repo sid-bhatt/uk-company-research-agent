@@ -10,6 +10,7 @@ from ukco.db.models import FlagRow, ReportRow, Review
 from ukco.report.schema import RiskReport
 
 TERMINAL = ("succeeded", "failed")
+MIN_REASON_CHARS = 10
 
 
 class ReviewError(ValueError):
@@ -120,8 +121,18 @@ def get_report(engine: Engine, report_id: int) -> dict[str, Any] | None:
 
 
 def list_reports(engine: Engine, *, company_number: str | None, limit: int) -> list[dict[str, Any]]:
+    """Recent reports without payloads, each with its current report-level decision."""
     table = cast(Table, ReportRow.__table__)
-    stmt = select(*(c for c in table.columns if c.name != "payload"))
+    latest_decision = (
+        select(Review.decision)
+        .where(Review.report_id == ReportRow.id, Review.flag_id.is_(None))
+        .order_by(Review.created_at.desc(), Review.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    stmt = select(
+        *(c for c in table.columns if c.name != "payload"), latest_decision.label("review_status")
+    )
     if company_number:
         stmt = stmt.where(ReportRow.company_number == company_number)
     with engine.connect() as conn:
@@ -174,6 +185,24 @@ def add_review(
             raise ReviewError(404, f"report {report_id} has no flag {flag_key}")
     elif decision not in ("approve", "reject"):
         raise ReviewError(422, "a report can be approved or rejected")
+
+    # Compliance rules, enforced here rather than trusted to the UI:
+    if decision in ("dismiss", "reject") and len((note or "").strip()) < MIN_REASON_CHARS:
+        target = "dismissing a flag" if flag_key else "rejecting a report"
+        raise ReviewError(422, f"{target} needs a reason (at least {MIN_REASON_CHARS} characters)")
+    if decision == "approve":
+        decided = current_decisions(list_reviews(engine, report_id))
+        with engine.connect() as conn:
+            keys = (
+                conn.execute(select(FlagRow.flag_key).where(FlagRow.report_id == report_id))
+                .scalars()
+                .all()
+            )
+        pending = sorted(k for k in keys if k not in decided)
+        if pending:
+            raise ReviewError(
+                409, f"review every flag before approving; pending: {', '.join(pending)}"
+            )
 
     with engine.begin() as conn:
         row = conn.execute(

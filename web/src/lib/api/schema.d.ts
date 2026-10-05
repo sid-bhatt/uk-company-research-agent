@@ -420,6 +420,8 @@ export interface components {
             report: components["schemas"]["RiskReport"] | null;
             /** Requested By */
             requested_by: string;
+            /** Review Status */
+            review_status?: ("approve" | "reject") | null;
             /** Risk Score */
             risk_score: number | null;
             /** Started At */
@@ -475,6 +477,8 @@ export interface components {
             id: number;
             /** Requested By */
             requested_by: string;
+            /** Review Status */
+            review_status?: ("approve" | "reject") | null;
             /** Risk Score */
             risk_score: number | null;
             /** Started At */

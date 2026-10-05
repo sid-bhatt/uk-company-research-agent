@@ -32,7 +32,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 ## Week 3: review UI + AWS
 | Day | Tasks | Done |
 |---|---|---|
-| 13 | Review UI: confirm/dismiss per flag + note, approve/reject report, audit-trail view. | ☐ |
+| 13 | Review UI: confirm/dismiss per flag + note, approve/reject report, audit-trail view. | ✅ |
 | 14 | "Why is this flagged?" chat drawer: agent with tools over the report's evidence (**cut candidate**). Buffer. | ☐ |
 | 15 | Terraform bootstrap (state, GitHub OIDC, budget as code), network (no NAT), ECR, RDS. | ☐ |
 | 16 | Terraform: ECS Fargate service, ALB, ACM, Route 53, Secrets Manager, logs. | ☐ |

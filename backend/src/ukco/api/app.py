@@ -196,6 +196,7 @@ def _routes(app: FastAPI) -> None:
     def get_report(report_id: int, request: Request, _: User) -> ReportDetail:
         row = _report_or_404(request, report_id)
         decisions = store.current_decisions(store.list_reviews(_engine(request), report_id))
+        row["review_status"] = decisions["report"].decision if "report" in decisions else None
         return ReportDetail(
             **ReportSummary.model_validate(row).model_dump(),
             report=RiskReport.model_validate(row["payload"]) if row["payload"] else None,

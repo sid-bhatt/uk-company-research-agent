@@ -14,7 +14,7 @@ a business customer.
    failed companies · recent ownership (PSC) changes · frequent office moves ·
    very new company in a high-risk sector · financial deterioration in filed accounts.
 3. **Risk score (0–100)** with every contributing reason.
-4. **Review:** the analyst confirms or dismisses each flag; every decision goes into an audit trail.
+4. **Review:** the analyst confirms or dismisses each flag (dismissing needs a written reason), then approves or rejects the customer (only once every flag is reviewed). Every decision goes into an append-only audit trail.
 
 **Design principle:** deterministic rules for everything computable from register data; the
 LLM only where it adds value (explanations, summaries, reading PDF-only accounts).

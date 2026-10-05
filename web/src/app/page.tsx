@@ -36,6 +36,7 @@ export default async function Home() {
                 <th className="py-1 font-medium">Company</th>
                 <th className="py-1 font-medium">Score</th>
                 <th className="py-1 font-medium">Status</th>
+                <th className="py-1 font-medium">Decision</th>
                 <th className="py-1 font-medium">Requested</th>
               </tr>
             </thead>
@@ -45,6 +46,17 @@ export default async function Home() {
                   <td className="py-2"><Link href={`/reports/${r.id}`} className="font-mono underline">{r.company_number}</Link></td>
                   <td className="py-2 tabular-nums">{r.risk_score ?? "—"}</td>
                   <td className={`py-2 ${STATUS_STYLE[r.status] ?? ""}`}>{r.status}</td>
+                  <td className="py-2">
+                    {r.review_status === "approve" ? (
+                      <span className="text-emerald-700 dark:text-emerald-300">Approved</span>
+                    ) : r.review_status === "reject" ? (
+                      <span className="text-red-700 dark:text-red-300">Rejected</span>
+                    ) : r.status === "succeeded" ? (
+                      <span className="text-zinc-500">Awaiting review</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="py-2 text-zinc-500">{date(r.created_at)} · {r.requested_by}</td>
                 </tr>
               ))}
