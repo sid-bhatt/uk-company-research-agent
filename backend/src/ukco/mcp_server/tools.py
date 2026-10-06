@@ -2,16 +2,14 @@
 so an assistant gets exactly the reports (and review trail) an analyst would."""
 
 import datetime as dt
-import json
 from typing import Any
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine
 
 from ukco.companies_house import CompaniesHouseClient, NotFoundError, normalise_company_number
-from ukco.db.models import FinancialFactRow
-from ukco.evidence import resolve_pointer
 from ukco.ingest.company import fetch_bundle, persist_bundle
 from ukco.report import store
+from ukco.report.evidence_values import evidence_value
 from ukco.report.narrative import NarrativeWriter
 from ukco.report.pipeline import generate_report
 from ukco.report.schema import RiskReport
@@ -106,7 +104,12 @@ class KybTools:
                 f"report {report_id} has no flag {flag_id}; flags: {[f.id for f in report.flags]}"
             )
         evidence = report.evidence_by_id()
-        items = [self._resolve(evidence[i]) for i in flag.evidence_ids if i in evidence]
+        store_ = DbEvidenceStore(self.engine)
+        items = [
+            evidence_value(self.engine, evidence[i], store_)
+            for i in flag.evidence_ids
+            if i in evidence
+        ]
         return {
             "report_id": report_id,
             "flag": {
@@ -172,39 +175,6 @@ class KybTools:
             "directors": directors,
             "note": "Secretaries and corporate officers are not network-checked.",
         }
-
-    def _resolve(self, item: Any) -> dict[str, Any]:
-        """The cited value itself, so an assistant can quote what the record says."""
-        c = item.citation
-        out: dict[str, Any] = {"id": item.id, "label": item.label, "url": c.url}
-        if c.kind == "api":
-            body = DbEvidenceStore(self.engine).snapshot_body(c.snapshot_id or 0)
-            try:
-                value = resolve_pointer(body, c.pointer) if body is not None else None
-            except (KeyError, IndexError, TypeError):
-                value = None
-            text = json.dumps(value, default=str)
-            out["value"] = text if len(text) <= MAX_VALUE_CHARS else text[:MAX_VALUE_CHARS] + "…"
-        else:
-            with self.engine.connect() as conn:
-                fact = conn.execute(
-                    select(
-                        FinancialFactRow.metric, FinancialFactRow.period_end, FinancialFactRow.value
-                    ).where(
-                        FinancialFactRow.document_id == c.document_id,
-                        FinancialFactRow.locator == c.pointer,
-                    )
-                ).first()
-            out["value"] = (
-                {
-                    "metric": fact.metric,
-                    "period_end": str(fact.period_end),
-                    "value": str(fact.value),
-                }
-                if fact
-                else None
-            )
-        return out
 
 
 def _date(value: str | None) -> dt.date | None:

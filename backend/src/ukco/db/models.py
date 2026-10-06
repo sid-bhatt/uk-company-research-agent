@@ -410,3 +410,47 @@ class Review(Base):
     model_id: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = _created_at()
+
+
+# --- Report chat (analyst Q&A about a report) ------------------------------------------
+
+
+class ChatConversation(Base):
+    """One analyst's conversation about one report. The system prompt and tool set are
+    fixed per conversation (`agent_version`): the model's thinking is tied to an unchanged
+    prefix, so a new version starts a new conversation rather than editing an old one."""
+
+    __tablename__ = "chat_conversations"
+    __table_args__ = (Index("ix_chat_conversations_report", "report_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id", ondelete="RESTRICT"))
+    user: Mapped[str] = mapped_column(Text)
+    agent_version: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created_at()
+
+
+class ChatMessage(Base):
+    """Every message sent to or received from the model, stored verbatim (content blocks
+    as the API returned them) and replayed unchanged. Append-only, enforced by a trigger:
+    it's both what preserved thinking requires and part of the audit trail."""
+
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "seq", name="uq_chat_messages_seq"),
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_chat_messages_role"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_conversations.id", ondelete="RESTRICT")
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    role: Mapped[str] = mapped_column(Text)
+    content: Mapped[list[Any]] = mapped_column(JSONB)
+    is_question: Mapped[bool] = mapped_column(
+        Boolean, server_default="false"
+    )  # the analyst typed it
+    usage: Mapped[dict[str, Any] | None]
+    created_at: Mapped[dt.datetime] = _created_at()

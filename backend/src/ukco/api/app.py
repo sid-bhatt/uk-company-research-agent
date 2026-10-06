@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
+import anthropic
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -23,6 +24,8 @@ from sqlalchemy import Engine, text
 from ukco import __version__
 from ukco.api.jobs import JobRequest, JobRunner, ProgressHub
 from ukco.api.schemas import (
+    ChatRequest,
+    ChatTurn,
     CompanyHit,
     CreateReportRequest,
     ReportCreated,
@@ -31,6 +34,8 @@ from ukco.api.schemas import (
     ReviewOut,
     ReviewRequest,
 )
+from ukco.chat import store as chat_store
+from ukco.chat.agent import ChatAgent, ChatError
 from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError, client_from_settings
 from ukco.config import get_settings
 from ukco.db import get_engine
@@ -47,6 +52,7 @@ def create_app(
     client: CompaniesHouseClient | None = None,
     writer: NarrativeWriter | None = None,
     use_settings_writer: bool = True,
+    chat_agent: ChatAgent | None = None,
 ) -> FastAPI:
     """Dependencies are injectable for tests; otherwise built from settings at startup."""
 
@@ -60,7 +66,7 @@ def create_app(
         )
         setup_tracing("ukco-api")
         store.fail_interrupted(eng)
-        _install(app, eng, ch, narrator)
+        _install(app, eng, ch, narrator, chat_agent or chat_agent_from_settings(eng))
         yield
         await app.state.runner.drain()
         if owns_client:
@@ -69,18 +75,32 @@ def create_app(
 
     app = FastAPI(title="KYB Due-Diligence Agent", version=__version__, lifespan=lifespan)
     if engine is not None and client is not None:  # tests: no lifespan needed
-        _install(app, engine, client, writer)
+        _install(app, engine, client, writer, chat_agent)
     _routes(app)
     return app
 
 
 def _install(
-    app: FastAPI, engine: Engine, client: CompaniesHouseClient, writer: NarrativeWriter | None
+    app: FastAPI,
+    engine: Engine,
+    client: CompaniesHouseClient,
+    writer: NarrativeWriter | None,
+    chat_agent: "ChatAgent | None" = None,
 ) -> None:
     app.state.engine = engine
     app.state.client = client
     app.state.hub = ProgressHub()
     app.state.runner = JobRunner(engine, client, writer, app.state.hub)
+    app.state.chat_agent = chat_agent
+
+
+def chat_agent_from_settings(engine: Engine) -> "ChatAgent | None":
+    settings = get_settings()
+    key = settings.anthropic_api_key
+    if not key or not key.get_secret_value().strip():
+        return None
+    client = anthropic.AsyncAnthropic(api_key=key.get_secret_value().strip())
+    return ChatAgent(client, engine, model=settings.llm_model, effort=settings.chat_effort)
 
 
 JWT_ISSUER, JWT_AUDIENCE = "ukco-web", "ukco-api"
@@ -234,6 +254,63 @@ def _routes(app: FastAPI) -> None:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.post("/reports/{report_id}/chat")
+    async def chat(
+        report_id: int, body: ChatRequest, request: Request, user: User
+    ) -> StreamingResponse:
+        """Ask about a report. Streams server-sent events: conversation, tool, text, done/error."""
+        agent: ChatAgent | None = request.app.state.chat_agent
+        if agent is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "chat needs ANTHROPIC_API_KEY")
+        row = _report_or_404(request, report_id)
+        if row["status"] != "succeeded" or not row["payload"]:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"report {report_id} is {row['status']}")
+        limit = get_settings().chat_daily_questions
+        if chat_store.questions_today(_engine(request), user) >= limit:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS, f"daily limit of {limit} questions reached"
+            )
+
+        events = agent.ask(
+            report_id,
+            RiskReport.model_validate(row["payload"]),
+            user,
+            body.question,
+            body.conversation_id,
+        )
+        try:  # surface bad input as an HTTP error before the stream starts
+            first = await anext(events)
+        except ChatError as exc:
+            code = (
+                status.HTTP_404_NOT_FOUND
+                if "not found" in str(exc)
+                else status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+            raise HTTPException(code, str(exc)) from exc
+
+        async def stream() -> AsyncIterator[str]:
+            yield _sse({"event": first.type, **first.data})
+            async for event in events:
+                yield _sse({"event": event.type, **event.data})
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.get("/reports/{report_id}/chat/{conversation_id}")
+    def chat_transcript(
+        report_id: int, conversation_id: int, request: Request, user: User
+    ) -> list[ChatTurn]:
+        conv = chat_store.get_conversation(_engine(request), conversation_id)
+        if conv is None or conv["report_id"] != report_id or conv["user"] != user:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
+        return [
+            ChatTurn(role=t.role, text=t.text)
+            for t in chat_store.transcript(_engine(request), conversation_id)
+        ]
 
     @app.post("/reports/{report_id}/reviews", status_code=status.HTTP_201_CREATED)
     def add_review(report_id: int, body: ReviewRequest, request: Request, user: User) -> ReviewOut:

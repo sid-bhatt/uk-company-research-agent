@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     llm_model: str = "claude-opus-5-5"
     # Short grounded writing; raise only if evals show it helps.
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    chat_daily_questions: int = 50  # per user: an LLM cost cap
 
     # Tracing (OpenTelemetry → Langfuse). Off unless keys or an OTLP endpoint are set.
     langfuse_public_key: str | None = None

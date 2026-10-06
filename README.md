@@ -79,9 +79,17 @@ make api                                     # → http://localhost:8000/docs
 | `GET /reports/{id}` | Status, the full cited report, current review decisions |
 | `POST /reports/{id}/reviews` | Confirm/dismiss a flag, approve/reject the report |
 | `GET /reports/{id}/reviews` | Append-only audit trail (UPDATE/DELETE blocked by a DB trigger) |
+| `POST /reports/{id}/chat` | Ask about a report (`{"question": "…", "conversation_id"?}`); streamed answer with citations |
+| `GET /reports/{id}/chat/{conversation_id}` | A conversation's transcript (your own only) |
 
 ## Assistants (MCP) and observability
 
+- **"Why is this flagged?" chat:** on the report page, an analyst can ask about the report.
+  Claude answers only from that report, using four read-only tools (a flag's cited records with
+  their values, a check's policy thresholds, the company snapshot, the review history). Answers
+  cite `[E3]`/`[F1]`; citations not in the report are flagged in the UI. Conversations are
+  append-only and kept with the report (a DB trigger blocks edits), replayed verbatim each turn.
+  Off unless `ANTHROPIC_API_KEY` is set; capped at `CHAT_DAILY_QUESTIONS` per user per day.
 - **MCP server:** `uv run ukco mcp` exposes `search_companies`, `get_risk_report`,
   `get_flag_evidence` and `officer_network` to Claude Desktop / Claude Code. Setup: [docs/mcp.md](docs/mcp.md).
 - **Tracing:** OpenTelemetry, exported to Langfuse (or any OTLP backend) when keys are set. One

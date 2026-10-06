@@ -40,6 +40,8 @@ erDiagram
 |---|---|---|
 | `reports` | `id` | `company_number`, `as_of`, `risk_score`, `status` (draft → in_review → approved/rejected), `payload` (JSONB, Pydantic `RiskReport`), `rules_version` (git sha + policy hash), `model_id`, `prompt_version`, `cost_usd`, `latency_ms`, `trace_id` |
 | `flags` | `id` | `report_id`, `flag_type`, `severity`, `points`, `explanation`, `evidence` (JSONB list of citations), `detector` (`rule`/`llm`) |
+| `chat_conversations` | `id` | `report_id`, `user`, `agent_version` (prompt + tools version), `model`. Private to their user |
+| `chat_messages` | `(conversation_id, seq)` | `role` (user/assistant), `content` (JSONB: the API's content blocks, verbatim), `is_question`, `usage`. **Insert-only** (trigger): replayed unchanged every turn |
 | `reviews` | `id` | `target` (flag or report), `target_id`, `decision` (confirm/dismiss/approve/reject), `note`, `reviewer`, `created_at`, plus `rules_version`/`model_id` copied from the report. **Insert-only**: the current decision is the latest row |
 | `watchlist` | `company_number` | Phase 2: Airflow re-runs reports nightly and alerts on new flags |
 

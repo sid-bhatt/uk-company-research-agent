@@ -37,7 +37,8 @@ data/
 .vscode/
 
 # Generated reports (contain real company data)
-reports/
+/reports/
+/backend/reports/
 
 # Per-company eval results (real companies; aggregates are committed instead)
 *.local.json

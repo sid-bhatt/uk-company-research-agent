@@ -33,7 +33,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | Day | Tasks | Done |
 |---|---|---|
 | 13 | Review UI: confirm/dismiss per flag + note, approve/reject report, audit-trail view. | ✅ |
-| 14 | "Why is this flagged?" chat drawer: agent with tools over the report's evidence (**cut candidate**). Buffer. | ☐ |
+| 14 | "Why is this flagged?" chat: tool-loop agent (Opus 5.5) over one report's evidence, 4 read-only tools bound to that report, append-only stored history (part of the audit trail), streamed answers with citation checks, per-user daily quota; panel on the report page. | ✅ |
 | 15 | Terraform bootstrap (state, GitHub OIDC, budget as code), network (no NAT), ECR, RDS. | ☐ |
 | 16 | Terraform: ECS Fargate service, ALB, ACM, Route 53, Secrets Manager, logs. | ☐ |
 | 17 | Deploy workflow (build → ECR → migrate → ECS). Frontend on Vercel. Per-user + global report quotas. | ☐ |

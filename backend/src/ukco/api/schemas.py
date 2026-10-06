@@ -98,3 +98,15 @@ class ReviewOut(BaseModel):
 class ReportDetail(ReportSummary):
     report: RiskReport | None
     decisions: dict[str, ReviewOut]  # latest decision per target: "report", "F1", …
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=1000)
+    conversation_id: int | None = None
+
+
+class ChatTurn(BaseModel):
+    role: Literal["analyst", "assistant", "tool"]
+    text: str
