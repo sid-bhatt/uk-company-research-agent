@@ -305,3 +305,26 @@ async def test_a_report_cannot_be_approved_with_unreviewed_flags(api) -> None:
     listed = (await http.get("/reports")).json()
     assert listed[0]["review_status"] == "approve"
     assert (await http.get(f"/reports/{rid}")).json()["review_status"] == "approve"
+
+
+async def test_daily_report_limits(api, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ukco.config import get_settings
+
+    http, app = api
+    settings = get_settings()
+    monkeypatch.setattr(settings, "reports_daily_per_user", 1)
+    await create_and_finish(http, app)
+    mine = await http.post("/reports", json={"company_number": ACTIVE})
+    assert mine.status_code == 429 and "limit of 1 reports" in mine.json()["detail"]
+
+    # Someone else is fine, until the site-wide limit is reached.
+    other = {"X-User": "someone-else"}
+    assert (
+        await http.post("/reports", json={"company_number": ACTIVE}, headers=other)
+    ).status_code == 202
+    monkeypatch.setattr(settings, "reports_daily_total", 2)
+    third = await http.post(
+        "/reports", json={"company_number": ACTIVE}, headers={"X-User": "third"}
+    )
+    assert third.status_code == 429 and "This demo" in third.json()["detail"]
+    await app.state.runner.drain()

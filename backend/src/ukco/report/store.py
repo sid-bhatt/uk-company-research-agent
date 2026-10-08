@@ -8,6 +8,7 @@ from sqlalchemy import Engine, Table, func, insert, select, update
 
 from ukco.db.models import FlagRow, ReportRow, Review
 from ukco.report.schema import RiskReport
+from ukco.timeutil import utc_midnight
 
 TERMINAL = ("succeeded", "failed")
 MIN_REASON_CHARS = 10
@@ -37,6 +38,17 @@ def create_job(
             )
             .returning(ReportRow.id)
         ).scalar_one()
+
+
+def reports_today(engine: Engine, user: str | None = None) -> int:
+    """Reports requested since midnight UTC, by one user or by everyone."""
+    query = (
+        select(func.count()).select_from(ReportRow).where(ReportRow.created_at >= utc_midnight())
+    )
+    if user is not None:
+        query = query.where(ReportRow.requested_by == user)
+    with engine.connect() as conn:
+        return conn.execute(query).scalar_one()
 
 
 def mark_running(engine: Engine, report_id: int) -> None:

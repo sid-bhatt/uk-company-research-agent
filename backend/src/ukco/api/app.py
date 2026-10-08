@@ -37,7 +37,7 @@ from ukco.api.schemas import (
 from ukco.chat import store as chat_store
 from ukco.chat.agent import ChatAgent, ChatError
 from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError, client_from_settings
-from ukco.config import get_settings
+from ukco.config import check_production, get_settings
 from ukco.db import get_engine
 from ukco.observability import setup_tracing, shutdown_tracing
 from ukco.report import render_markdown, store
@@ -58,6 +58,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        check_production(get_settings())
         owns_client = client is None
         eng = engine or get_engine()
         ch = client or client_from_settings()
@@ -150,6 +151,20 @@ def _report_or_404(request: Request, report_id: int) -> dict[str, Any]:
     return row
 
 
+def _within_limit(what: str, mine: int, per_user: int, everyone: int, total: int) -> None:
+    """429 once today's usage reaches the per-user or the site-wide daily limit."""
+    if mine >= per_user:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"You've reached today's limit of {per_user} {what}. It resets at midnight UTC.",
+        )
+    if everyone >= total:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"This demo has reached today's limit of {total} {what}. Try again tomorrow.",
+        )
+
+
 def _routes(app: FastAPI) -> None:
     @app.get("/health")
     def health(request: Request) -> dict[str, str]:
@@ -184,6 +199,14 @@ def _routes(app: FastAPI) -> None:
     async def create_report(
         body: CreateReportRequest, request: Request, user: User
     ) -> ReportCreated:
+        settings = get_settings()
+        _within_limit(
+            "reports",
+            store.reports_today(_engine(request), user),
+            settings.reports_daily_per_user,
+            store.reports_today(_engine(request)),
+            settings.reports_daily_total,
+        )
         report_id = store.create_job(
             _engine(request),
             body.company_number,
@@ -266,11 +289,14 @@ def _routes(app: FastAPI) -> None:
         row = _report_or_404(request, report_id)
         if row["status"] != "succeeded" or not row["payload"]:
             raise HTTPException(status.HTTP_409_CONFLICT, f"report {report_id} is {row['status']}")
-        limit = get_settings().chat_daily_questions
-        if chat_store.questions_today(_engine(request), user) >= limit:
-            raise HTTPException(
-                status.HTTP_429_TOO_MANY_REQUESTS, f"daily limit of {limit} questions reached"
-            )
+        settings = get_settings()
+        _within_limit(
+            "questions",
+            chat_store.questions_today(_engine(request), user),
+            settings.chat_daily_questions,
+            chat_store.questions_today(_engine(request)),
+            settings.chat_daily_total,
+        )
 
         events = agent.ask(
             report_id,

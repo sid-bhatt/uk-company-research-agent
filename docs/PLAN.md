@@ -34,9 +34,9 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 |---|---|---|
 | 13 | Review UI: confirm/dismiss per flag + note, approve/reject report, audit-trail view. | ✅ |
 | 14 | "Why is this flagged?" chat: tool-loop agent (Opus 5.5) over one report's evidence, 4 read-only tools bound to that report, append-only stored history (part of the audit trail), streamed answers with citation checks, per-user daily quota; panel on the report page. | ✅ |
-| 15 | Terraform bootstrap (state, GitHub OIDC, budget as code), network (no NAT), ECR, RDS. | ☐ |
-| 16 | Terraform: ECS Fargate service, ALB, ACM, Route 53, Secrets Manager, logs. | ☐ |
-| 17 | Deploy workflow (build → ECR → migrate → ECS). Frontend on Vercel. Per-user + global report quotas. | ☐ |
+| 15 | Hosting decision ([ADR-005](adr/0005-lean-single-server-hosting.md): lean single server). Production stack `deploy/compose.yml` (Caddy HTTPS → API → Postgres, migrations first), verified locally end to end. Daily per-user + site-wide report/chat limits. API refuses to start in production without its secrets. | ✅ |
+| 16 | Terraform: bootstrap (S3 state, GitHub OIDC deploy role, budget as code), VPC (public subnet, no NAT), EC2 `t4g.micro` + Elastic IP + SG 80/443, SSM (no SSH), ECR, Parameter Store secrets, nightly `pg_dump` → S3. | ☐ |
+| 17 | Deploy workflow (arm64 build → ECR → SSM: pull, migrate, restart). Frontend on Vercel + GitHub OAuth app. | ☐ |
 | 18 | Smoke test on 5 real companies, README v0 (architecture diagram, sample report screenshot, eval baseline, trade-offs), demo GIF. **Ship.** | ☐ |
 
 ## Weeks 4–6: evals + observability + pipeline
@@ -61,7 +61,7 @@ Candidates (pick one, measure against the week-6 eval baseline):
 | 4 | Evals | Rule fidelity + point-in-time predictive validity + extraction/citation accuracy; frozen snapshots in CI |
 | 5 | LLM access | Anthropic API behind a thin client; Bedrock option later |
 | 6 | Risk policy | `risk_policy.yaml`, versioned; shipped values are illustrative |
-| 7 | Domain | Buy before Day 16 (HTTPS on ALB) |
-| 8 | AWS budget | $50/month, alerts at 50/80/100% |
-| 9 | Airflow | Watchlist monitoring + snapshot refresh; local Docker, prod as scheduled ECS task |
+| 7 | Domain | Optional: `<ip>.sslip.io` gives real HTTPS until one is bought |
+| 8 | AWS budget | $20/month, alerts at 50/80/100% + forecast. Hosting: one server ([ADR-005](adr/0005-lean-single-server-hosting.md)), ~$12–15/month |
+| 9 | Airflow | Watchlist monitoring + snapshot refresh; local Docker, prod as a scheduled container on the server |
 | 10 | Repo visibility | Private until v1, then public. **Before going public:** rewrite git history to purge real names from early KYB fixtures (commits in #4/#5; fixed in Day 6) |

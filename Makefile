@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build prod-up prod-down test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
@@ -30,6 +30,12 @@ api-types:        ## Regenerate the web app's TypeScript types after an API chan
 
 docker-build:     ## Build the API image
 	docker build -t ukco-api:dev --build-arg GIT_SHA=$$(git rev-parse --short HEAD) backend
+
+prod-up:          ## Run the production stack locally (https://localhost); needs deploy/.env
+	docker compose -f deploy/compose.yml --env-file deploy/.env up -d --wait
+
+prod-down:
+	docker compose -f deploy/compose.yml --env-file deploy/.env down
 
 doctor:           ## Check local setup
 	cd backend && uv run ukco doctor

@@ -1,3 +1,6 @@
 # False positive: a made-up test value ("k3y-v4lue-9f2c") in the settings-redaction test,
 # replaced with an obviously fake one in the next commit. Not a credential.
 49042052cc938c82c25ad7355a063a4e4c7d24a5:backend/tests/test_smoke.py:generic-api-key:18
+# False positive: an empty API_JWT_SECRET= followed by an inline comment in the env example;
+# no value was ever committed. Comments moved to their own lines in the next commit.
+110408444b5a722ceb3127437f6bc3795a95a6d7:deploy/.env.example:generic-api-key:7

@@ -1,12 +1,12 @@
 """Chat persistence: conversations and their verbatim, append-only message log."""
 
-import datetime as dt
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from sqlalchemy import Engine, func, insert, select
 
 from ukco.db.models import ChatConversation, ChatMessage
+from ukco.timeutil import utc_midnight
 
 
 def create_conversation(
@@ -71,20 +71,18 @@ def append(
     return seq
 
 
-def questions_today(engine: Engine, user: str) -> int:
-    """Questions this user asked since midnight UTC (a per-user cost cap)."""
-    midnight = dt.datetime.now(dt.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+def questions_today(engine: Engine, user: str | None = None) -> int:
+    """Questions asked since midnight UTC, by one user or by everyone (cost caps)."""
+    query = (
+        select(func.count())
+        .select_from(ChatMessage)
+        .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
+        .where(ChatMessage.is_question, ChatMessage.created_at >= utc_midnight())
+    )
+    if user is not None:
+        query = query.where(ChatConversation.user == user)
     with engine.connect() as conn:
-        return conn.execute(
-            select(func.count())
-            .select_from(ChatMessage)
-            .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
-            .where(
-                ChatConversation.user == user,
-                ChatMessage.is_question,
-                ChatMessage.created_at >= midnight,
-            )
-        ).scalar_one()
+        return conn.execute(query).scalar_one()
 
 
 Speaker = Literal["analyst", "assistant", "tool"]

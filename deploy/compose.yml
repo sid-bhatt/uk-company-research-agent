@@ -1,0 +1,59 @@
+# Production stack for one server (ADR-005): Caddy (HTTPS) → API → Postgres.
+# Same image CI builds; migrations run as a one-off before the API starts.
+#   API_IMAGE=… docker compose -f deploy/compose.yml --env-file deploy/.env up -d
+name: ukco
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ukco
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ukco
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=40"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ukco -d ukco"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # No published port: only the API reaches the database.
+
+  migrate:
+    image: ${API_IMAGE:?set API_IMAGE}
+    command: ["ukco", "db", "upgrade"]
+    env_file: .env
+    environment: &db_url
+      DATABASE_URL: postgresql://ukco:${POSTGRES_PASSWORD}@db:5432/ukco
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE}
+    restart: unless-stopped
+    env_file: .env
+    environment: *db_url
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      API_HOST: ${API_HOST:?set API_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  caddy_data:

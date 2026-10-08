@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     chat_daily_questions: int = 50  # per user: an LLM cost cap
 
+    # Daily usage limits (UTC days), so a public demo can't run up Companies House or LLM use.
+    reports_daily_per_user: int = 20
+    reports_daily_total: int = 200
+    chat_daily_total: int = 500
+
     # Tracing (OpenTelemetry → Langfuse). Off unless keys or an OTLP endpoint are set.
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -42,6 +47,24 @@ class Settings(BaseSettings):
 
     # Recorded on every report so a decision can be traced to the exact code that made it.
     git_sha: str = "dev"
+
+
+def check_production(settings: Settings) -> None:
+    """Refuse to start a non-local deployment that would be unsafe or half-configured."""
+    if settings.env == "local":
+        return
+    missing = [
+        name
+        for name, value in [
+            ("API_JWT_SECRET", settings.api_jwt_secret),
+            ("COMPANIES_HOUSE_API_KEY", settings.companies_house_api_key),
+        ]
+        if value is None or not value.get_secret_value().strip()
+    ]
+    if missing:
+        raise RuntimeError(f"ENV={settings.env} needs {', '.join(missing)}")
+    if len(settings.api_jwt_secret.get_secret_value()) < 32:  # type: ignore[union-attr]
+        raise RuntimeError("API_JWT_SECRET must be at least 32 characters")
 
 
 @lru_cache

@@ -1,0 +1,15 @@
+# HTTPS in front of the API. Caddy gets and renews a Let's Encrypt certificate for
+# API_HOST automatically (for "localhost" it uses its own local CA instead).
+{$API_HOST} {
+	encode gzip
+	reverse_proxy api:8000 {
+		flush_interval -1 # stream progress and chat events as they happen
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	log
+}

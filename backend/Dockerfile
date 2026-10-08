@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# KYB API image. Built in CI, run on ECS Fargate (week 3). Also runs one-off tasks:
+# KYB API image. Built in CI, run by deploy/compose.yml (ADR-005). Also runs one-off tasks:
 #   docker run … ukco db upgrade      /      docker run … ukco report <number>
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
