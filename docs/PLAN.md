@@ -35,7 +35,7 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | 13 | Review UI: confirm/dismiss per flag + note, approve/reject report, audit-trail view. | ✅ |
 | 14 | "Why is this flagged?" chat: tool-loop agent (Opus 5.5) over one report's evidence, 4 read-only tools bound to that report, append-only stored history (part of the audit trail), streamed answers with citation checks, per-user daily quota; panel on the report page. | ✅ |
 | 15 | Hosting decision ([ADR-005](adr/0005-lean-single-server-hosting.md): lean single server). Production stack `deploy/compose.yml` (Caddy HTTPS → API → Postgres, migrations first), verified locally end to end. Daily per-user + site-wide report/chat limits. API refuses to start in production without its secrets. | ✅ |
-| 16 | Terraform: bootstrap (S3 state, GitHub OIDC deploy role, budget as code), VPC (public subnet, no NAT), EC2 `t4g.micro` + Elastic IP + SG 80/443, SSM (no SSH), ECR, Parameter Store secrets, nightly `pg_dump` → S3. | ☐ |
+| 16 | Terraform (applied to `eu-north-1`): bootstrap (S3 state), GitHub OIDC deploy role, budget as code, VPC (public subnet, no NAT), EC2 `t4g.micro` + Elastic IP + SG 80/443, SSM (no SSH), ECR, Parameter Store secrets, nightly `pg_dump` → S3. Server verified over SSM. | ✅ |
 | 17 | Deploy workflow (arm64 build → ECR → SSM: pull, migrate, restart). Frontend on Vercel + GitHub OAuth app. | ☐ |
 | 18 | Smoke test on 5 real companies, README v0 (architecture diagram, sample report screenshot, eval baseline, trade-offs), demo GIF. **Ship.** | ☐ |
 

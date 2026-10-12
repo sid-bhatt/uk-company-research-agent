@@ -42,3 +42,6 @@ data/
 
 # Per-company eval results (real companies; aggregates are committed instead)
 *.local.json
+
+# Terraform plan files can contain secrets
+tfplan

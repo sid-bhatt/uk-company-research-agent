@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (git-ignored) and fill in.
+alert_email = "you@example.com"
+# api_host = "api.yourdomain.com"   # optional; default is <elastic-ip>.sslip.io

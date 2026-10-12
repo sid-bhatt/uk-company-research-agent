@@ -84,6 +84,19 @@ jobs:
         env:
           AUTH_SECRET: ci-build-only
 
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate (no AWS access needed)
+        run: |
+          for stack in bootstrap main; do
+            terraform -chdir=infra/terraform/$stack init -backend=false -input=false
+            terraform -chdir=infra/terraform/$stack validate
+          done
+
   secrets-scan:
     runs-on: ubuntu-latest
     steps:

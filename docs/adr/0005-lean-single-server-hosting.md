@@ -28,6 +28,9 @@ One ARM EC2 instance (`t4g.micro`, resizable by a Terraform variable) runs the
 Rough cost: instance ~$7, public IPv4 ~$3.65, 20 GB gp3 ~$1.60, S3/ECR/logs < $1 → **about
 $12–15/month**, covered by sign-up credits while they last.
 
+**Region:** `eu-north-1` (Stockholm). The hosting account uses AWS's "AWS (new)" mode, whose
+guardrail policy only allows this region; data is still in the EU/EEA.
+
 ## Consequences
 - **Single point of failure:** a reboot means ~1 minute of downtime; a lost instance means
   restoring last night's dump (RPO 24 h). Acceptable for a demo, stated plainly in the README.

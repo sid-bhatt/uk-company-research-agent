@@ -1,0 +1,55 @@
+#!/bin/bash
+# First boot only. Prepares the server; the deploy job (Day 17) brings up the app.
+set -euxo pipefail
+
+# Data volume → /var/lib/docker (images, Postgres and Caddy volumes). Never reformatted.
+DEV="${data_device}"
+for _ in $(seq 1 60); do [ -e "$DEV" ] && break; sleep 5; done
+blkid "$DEV" || mkfs.xfs "$DEV"
+mkdir -p /var/lib/docker
+grep -q /var/lib/docker /etc/fstab || echo "$DEV /var/lib/docker xfs defaults,nofail 0 2" >> /etc/fstab
+mount -a
+
+# 1 GB swap: headroom for Postgres + API on a 1 GB instance.
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+fi
+
+dnf install -y docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+  https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+systemctl enable --now docker
+mkdir -p /opt/ukco
+
+# Nightly logical backup to S3 (kept 30 days by a bucket lifecycle rule).
+cat > /usr/local/bin/ukco-backup <<'SH'
+#!/bin/bash
+set -euo pipefail
+cd /opt/ukco/deploy
+docker compose --env-file .env exec -T db pg_dump -U ukco --format=custom ukco \
+  | aws s3 cp - "s3://${ops_bucket}/backups/$(date -u +%F).dump"
+SH
+chmod +x /usr/local/bin/ukco-backup
+
+cat > /etc/systemd/system/ukco-backup.service <<'UNIT'
+[Unit]
+Description=Back up the ukco database to S3
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ukco-backup
+UNIT
+cat > /etc/systemd/system/ukco-backup.timer <<'UNIT'
+[Unit]
+Description=Nightly ukco database backup
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now ukco-backup.timer

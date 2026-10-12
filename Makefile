@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build prod-up prod-down test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build prod-up prod-down tf-bootstrap tf-init tf-plan tf-apply secrets test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
@@ -36,6 +36,23 @@ prod-up:          ## Run the production stack locally (https://localhost); needs
 
 prod-down:
 	docker compose -f deploy/compose.yml --env-file deploy/.env down
+
+TF := terraform -chdir=infra/terraform
+
+tf-bootstrap:     ## One-time: create the Terraform state bucket
+	$(TF)/bootstrap init -input=false && $(TF)/bootstrap apply
+
+tf-init:          ## Connect the main stack to its state bucket
+	$(TF)/main init -input=false -backend-config="bucket=ukco-tfstate-$$(aws sts get-caller-identity --query Account --output text)"
+
+tf-plan:          ## Show what Terraform would change (changes nothing)
+	$(TF)/main plan -out=tfplan
+
+tf-apply:         ## Apply the plan from `make tf-plan`
+	$(TF)/main apply tfplan
+
+secrets:          ## Store server secrets in SSM Parameter Store (safe to re-run)
+	infra/scripts/put-secrets.sh
 
 doctor:           ## Check local setup
 	cd backend && uv run ukco doctor
