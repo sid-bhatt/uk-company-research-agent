@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build prod-up prod-down tf-bootstrap tf-init tf-plan tf-apply secrets test lint fmt
+.PHONY: setup up down migrate doctor ingest-metadata api web api-types docker-build prod-up prod-down tf-bootstrap tf-init tf-plan tf-apply secrets deploy test lint fmt
 
 setup:            ## Install Python deps and git hooks
 	cd backend && uv sync
@@ -53,6 +53,14 @@ tf-apply:         ## Apply the plan from `make tf-plan`
 
 secrets:          ## Store server secrets in SSM Parameter Store (safe to re-run)
 	infra/scripts/put-secrets.sh
+
+deploy:           ## Deploy the current commit to the server (CI does this on main)
+	cd infra/terraform/main && \
+	  ECR_REPOSITORY_URL=$$(terraform output -raw ecr_repository_url) \
+	  OPS_BUCKET=$$(terraform output -raw ops_bucket) \
+	  INSTANCE_ID=$$(terraform output -raw instance_id) \
+	  API_HOST=$$(terraform output -raw api_host) \
+	  AWS_REGION=$${AWS_REGION:-eu-north-1} ../../scripts/deploy.sh
 
 doctor:           ## Check local setup
 	cd backend && uv run ukco doctor

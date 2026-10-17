@@ -89,9 +89,10 @@ export function NewReportForm() {
                 disabled={busy}
                 className="flex w-full items-baseline justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
-                <span>
+                <span className={h.status === "active" ? "" : "opacity-60"}>
                   <span className="font-medium">{h.name}</span>{" "}
                   <span className="text-zinc-500">{h.company_number}</span>
+                  {h.also_matched && <span className="ml-2 text-xs text-zinc-500">also matched: {h.also_matched}</span>}
                 </span>
                 <span className="text-xs text-zinc-500">{h.status} · {date(h.incorporated)}</span>
               </button>

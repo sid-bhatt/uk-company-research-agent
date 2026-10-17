@@ -161,6 +161,17 @@
             ],
             "title": "Address"
           },
+          "also_matched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Also Matched"
+          },
           "company_number": {
             "title": "Company Number",
             "type": "string"

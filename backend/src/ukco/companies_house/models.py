@@ -46,6 +46,8 @@ class CompanySearchItem(_Model):
     company_type: str | None = None
     date_of_creation: dt.date | None = None
     address_snippet: str | None = None
+    # Extra text that matched the query: in practice a previous company name.
+    snippet: str | None = None
 
 
 class CompanySearchResult(_Model):

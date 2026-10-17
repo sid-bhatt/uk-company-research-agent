@@ -97,6 +97,25 @@ make api                                     # → http://localhost:8000/docs
   cost). Every report also records its own stage timings, Companies House request count and
   trace id. Prompt content isn't exported unless `TRACE_CONTENT=true` (it names officers).
 
+## Deployment
+
+Live: web app on Vercel, API on one small AWS server in `eu-north-1`
+([ADR-005](docs/adr/0005-lean-single-server-hosting.md), about $10/month).
+
+- **Infrastructure:** Terraform in [`infra/terraform`](infra/terraform): VPC, one Graviton
+  instance (no SSH; admin via SSM), encrypted data volume, ECR, nightly database dump to S3,
+  budget alerts. `make tf-plan` / `make tf-apply`.
+- **Stack on the server:** [`deploy/compose.yml`](deploy/compose.yml): Caddy (automatic
+  HTTPS) → API → Postgres, with migrations run before each start.
+- **Deploys:** after CI passes on `main`, [`deploy.yml`](.github/workflows/deploy.yml) builds
+  the arm64 image, pushes it to ECR and has the server pull and restart, then checks
+  `/health` over HTTPS. GitHub authenticates to AWS with OIDC (no stored keys), and only
+  `main` can assume the role. `make deploy` does the same by hand.
+- **Secrets:** SSM Parameter Store (`make secrets`), written to the server's `.env` at
+  deploy time; never in git or the image.
+- **Access:** GitHub sign-in with an allow-list (`AUTH_ALLOWED_USERS`), plus daily per-user
+  and site-wide limits on reports and chat.
+
 ## Eval results
 
 Scored **as of 30 Sep 2024** using only what was known then; outcome = compulsory strike-off

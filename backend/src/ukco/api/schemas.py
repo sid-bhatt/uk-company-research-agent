@@ -38,6 +38,8 @@ class CompanyHit(BaseModel):
     status: str | None
     incorporated: dt.date | None
     address: str | None
+    # Other text Companies House matched the query on: usually a previous company name.
+    also_matched: str | None = None
 
 
 class ReportCreated(BaseModel):

@@ -261,6 +261,7 @@ async def test_company_search(api) -> None:
         "status": "active",
         "incorporated": "1951-12-29",
         "address": hits[0]["address"],
+        "also_matched": "GREGGS BAKERIES LIMITED",
     }
 
 
@@ -328,3 +329,30 @@ async def test_daily_report_limits(api, monkeypatch: pytest.MonkeyPatch) -> None
     )
     assert third.status_code == 429 and "This demo" in third.json()["detail"]
     await app.state.runner.drain()
+
+
+def test_search_ranks_current_names_and_active_companies_first() -> None:
+    """Companies House returns previous-name matches above the company now using the name
+    (seen live for "temu"); pressing Enter must not check a company that only used to."""
+    from ukco.api.app import _also_matched, rank_search_hits
+    from ukco.companies_house.models import CompanySearchItem
+
+    def item(number: str, title: str, status: str, snippet: str = "") -> CompanySearchItem:
+        return CompanySearchItem(
+            company_number=number, title=title, company_status=status, snippet=snippet
+        )
+
+    items = [
+        item("1", "WOOLPEX LTD", "active", "TEMU LTD"),
+        item("2", "15094883 LIMITED", "dissolved", "TEMU"),
+        item("3", "TEMU OLD SHOP LTD", "dissolved"),
+        item("4", "TEMU PAYMENTS UK LIMITED", "active"),
+        item("5", "BRENEL LTD", "active", "TEMU UK LTD"),
+        item("7", "TEMUJIN LTD", "active"),  # only shares the first letters
+    ]
+    ranked = rank_search_hits("Temu ", items)
+    # current name (active, then dissolved) → previous name (active, then dissolved) → rest
+    assert [i.company_number for i in ranked] == ["4", "3", "1", "5", "2", "7"]
+    assert _also_matched(items[0]) == "TEMU LTD"
+    assert _also_matched(items[3]) is None
+    assert _also_matched(item("6", "Temu Ltd", "active", "TEMU LTD")) is None  # same name

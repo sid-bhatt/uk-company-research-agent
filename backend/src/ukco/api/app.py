@@ -11,6 +11,7 @@ GET  /health
 """
 
 import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -37,6 +38,7 @@ from ukco.api.schemas import (
 from ukco.chat import store as chat_store
 from ukco.chat.agent import ChatAgent, ChatError
 from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError, client_from_settings
+from ukco.companies_house.models import CompanySearchItem
 from ukco.config import check_production, get_settings
 from ukco.db import get_engine
 from ukco.observability import setup_tracing, shutdown_tracing
@@ -165,6 +167,28 @@ def _within_limit(what: str, mine: int, per_user: int, everyone: int, total: int
         )
 
 
+def _also_matched(item: CompanySearchItem) -> str | None:
+    snippet = (item.snippet or "").strip()
+    return snippet if snippet and snippet.casefold() != item.title.casefold() else None
+
+
+def rank_search_hits(query: str, items: list[CompanySearchItem]) -> list[CompanySearchItem]:
+    """Whole-word matches on the current name first, then on another matched name (usually
+    a previous one), then the rest; active companies before others within each group, and
+    Companies House's own order breaks ties. Without this, a company that merely used to
+    carry a well-known name can outrank the one that carries it now."""
+    wanted = set(re.findall(r"\w+", query.casefold()))
+
+    def has_all(text: str | None) -> bool:
+        return wanted <= set(re.findall(r"\w+", (text or "").casefold()))
+
+    def key(item: CompanySearchItem) -> tuple[int, bool]:
+        tier = 0 if has_all(item.title) else 1 if has_all(item.snippet) else 2
+        return (tier, item.company_status != "active")
+
+    return sorted(items, key=key)
+
+
 def _routes(app: FastAPI) -> None:
     @app.get("/health")
     def health(request: Request) -> dict[str, str]:
@@ -181,7 +205,9 @@ def _routes(app: FastAPI) -> None:
     ) -> list[CompanyHit]:
         client: CompaniesHouseClient = request.app.state.client
         try:
-            result = await client.search_companies(q, limit=limit)
+            # Ask for more than we show: Companies House ranks previous-name matches
+            # alongside (often above) current-name ones, so we re-rank before cutting.
+            result = await client.search_companies(q, limit=min(limit * 3, 30))
         except CompaniesHouseError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Companies House: {exc}") from exc
         return [
@@ -191,8 +217,9 @@ def _routes(app: FastAPI) -> None:
                 status=c.company_status,
                 incorporated=c.date_of_creation,
                 address=c.address_snippet,
+                also_matched=_also_matched(c),
             )
-            for c in result.items
+            for c in rank_search_hits(q, result.items)[:limit]
         ]
 
     @app.post("/reports", status_code=status.HTTP_202_ACCEPTED)

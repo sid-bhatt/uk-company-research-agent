@@ -226,6 +226,8 @@ export interface components {
         CompanyHit: {
             /** Address */
             address: string | null;
+            /** Also Matched */
+            also_matched?: string | null;
             /** Company Number */
             company_number: string;
             /** Incorporated */
