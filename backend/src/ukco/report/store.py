@@ -132,8 +132,11 @@ def get_report(engine: Engine, report_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def list_reports(engine: Engine, *, company_number: str | None, limit: int) -> list[dict[str, Any]]:
-    """Recent reports without payloads, each with its current report-level decision."""
+def list_reports(
+    engine: Engine, *, company_number: str | None, limit: int, archived: bool = False
+) -> list[dict[str, Any]]:
+    """Recent reports without payloads, each with the company name and its current
+    report-level decision. Archived reports are listed only when asked for."""
     table = cast(Table, ReportRow.__table__)
     latest_decision = (
         select(Review.decision)
@@ -143,8 +146,10 @@ def list_reports(engine: Engine, *, company_number: str | None, limit: int) -> l
         .scalar_subquery()
     )
     stmt = select(
-        *(c for c in table.columns if c.name != "payload"), latest_decision.label("review_status")
-    )
+        *(c for c in table.columns if c.name != "payload"),
+        ReportRow.payload["company"]["name"].astext.label("company_name"),
+        latest_decision.label("review_status"),
+    ).where(ReportRow.archived_at.is_not(None) if archived else ReportRow.archived_at.is_(None))
     if company_number:
         stmt = stmt.where(ReportRow.company_number == company_number)
     with engine.connect() as conn:
@@ -152,6 +157,23 @@ def list_reports(engine: Engine, *, company_number: str | None, limit: int) -> l
             conn.execute(stmt.order_by(ReportRow.created_at.desc()).limit(limit)).mappings().all()
         )
     return [dict(r) for r in rows]
+
+
+def set_archived(engine: Engine, report_id: int, user: str | None) -> bool:
+    """Archive (user given) or restore (None). False if the report doesn't exist."""
+    values = (
+        {"archived_at": func.now(), "archived_by": user}
+        if user
+        else {"archived_at": None, "archived_by": None}
+    )
+    with engine.begin() as conn:
+        result = conn.execute(
+            update(ReportRow)
+            .where(ReportRow.id == report_id)
+            .values(**values)
+            .returning(ReportRow.id)
+        )
+        return result.first() is not None
 
 
 @dataclass(frozen=True)

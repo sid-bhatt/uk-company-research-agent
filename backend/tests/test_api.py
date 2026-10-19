@@ -356,3 +356,23 @@ def test_search_ranks_current_names_and_active_companies_first() -> None:
     assert _also_matched(items[0]) == "TEMU LTD"
     assert _also_matched(items[3]) is None
     assert _also_matched(item("6", "Temu Ltd", "active", "TEMU LTD")) is None  # same name
+
+
+async def test_reports_list_names_and_archive_without_deleting(api) -> None:
+    http, app = api
+    detail = await create_and_finish(http, app)
+    rid = detail["id"]
+
+    listed = (await http.get("/reports")).json()
+    assert listed[0]["company_name"] == detail["report"]["company"]["name"]
+
+    assert (await http.post(f"/reports/{rid}/archive")).status_code == 204
+    assert rid not in [r["id"] for r in (await http.get("/reports")).json()]
+    archived = (await http.get("/reports", params={"archived": True})).json()
+    assert [(r["id"], r["archived_by"]) for r in archived] == [(rid, "local-dev")]
+    # Archived, not deleted: the report and its audit trail are still there.
+    assert (await http.get(f"/reports/{rid}")).json()["status"] == "succeeded"
+
+    assert (await http.delete(f"/reports/{rid}/archive")).status_code == 204
+    assert rid in [r["id"] for r in (await http.get("/reports")).json()]
+    assert (await http.post("/reports/999999/archive")).status_code == 404

@@ -365,6 +365,9 @@ class ReportRow(Base):
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = _created_at()
     started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Archived reports are hidden from lists but kept (they're part of the audit record).
+    archived_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_by: Mapped[str | None] = mapped_column(Text)
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 

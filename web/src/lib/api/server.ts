@@ -53,7 +53,8 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  listReports: (limit = 20) => json<ReportSummary[]>(`/reports?limit=${limit}`),
+  listReports: (limit = 20, archived = false) =>
+    json<ReportSummary[]>(`/reports?limit=${limit}${archived ? "&archived=true" : ""}`),
   getReport: (id: number) => json<ReportDetail>(`/reports/${id}`),
   createReport: (companyNumber: string, asOf?: string) =>
     json<{ id: number; status: string }>("/reports", {

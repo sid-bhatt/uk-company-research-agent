@@ -258,9 +258,24 @@ def _routes(app: FastAPI) -> None:
         _: User,
         company_number: str | None = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
+        archived: bool = False,
     ) -> list[ReportSummary]:
-        rows = store.list_reports(_engine(request), company_number=company_number, limit=limit)
+        rows = store.list_reports(
+            _engine(request), company_number=company_number, limit=limit, archived=archived
+        )
         return [ReportSummary.model_validate(r) for r in rows]
+
+    @app.post("/reports/{report_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+    def archive_report(report_id: int, request: Request, user: User) -> None:
+        """Hide a report from lists. Nothing is deleted: reports and their reviews are the
+        audit record, so archiving is recorded (who, when) and can be undone."""
+        if not store.set_archived(_engine(request), report_id, user):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"report {report_id} not found")
+
+    @app.delete("/reports/{report_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+    def restore_report(report_id: int, request: Request, _: User) -> None:
+        if not store.set_archived(_engine(request), report_id, None):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"report {report_id} not found")
 
     @app.get("/reports/{report_id}")
     def get_report(report_id: int, request: Request, _: User) -> ReportDetail:

@@ -73,6 +73,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/{report_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Report
+         * @description Hide a report from lists. Nothing is deleted: reports and their reviews are the
+         *     audit record, so archiving is recorded (who, when) and can be undone.
+         */
+        post: operations["archive_report_reports__report_id__archive_post"];
+        /** Restore Report */
+        delete: operations["restore_report_reports__report_id__archive_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/{report_id}/chat": {
         parameters: {
             query?: never;
@@ -452,8 +474,14 @@ export interface components {
         };
         /** ReportDetail */
         ReportDetail: {
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived By */
+            archived_by?: string | null;
             /** As Of */
             as_of: string | null;
+            /** Company Name */
+            company_name?: string | null;
             /** Company Number */
             company_number: string;
             /** Cost Usd */
@@ -514,8 +542,14 @@ export interface components {
         };
         /** ReportSummary */
         ReportSummary: {
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived By */
+            archived_by?: string | null;
             /** As Of */
             as_of: string | null;
+            /** Company Name */
+            company_name?: string | null;
             /** Company Number */
             company_number: string;
             /** Cost Usd */
@@ -699,6 +733,7 @@ export interface operations {
             query?: {
                 company_number?: string | null;
                 limit?: number;
+                archived?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -787,6 +822,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ReportDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_report_reports__report_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-user"?: string | null;
+            };
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_report_reports__report_id__archive_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-user"?: string | null;
+            };
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

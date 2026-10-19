@@ -51,6 +51,7 @@ class ReportCreated(BaseModel):
 class ReportSummary(BaseModel):
     id: int
     company_number: str
+    company_name: str | None = None  # from the finished report; None while queued/failed
     as_of: dt.date | None
     status: str
     requested_by: str
@@ -61,6 +62,8 @@ class ReportSummary(BaseModel):
     started_at: dt.datetime | None
     finished_at: dt.datetime | None
     review_status: Literal["approve", "reject"] | None = None  # current report decision
+    archived_at: dt.datetime | None = None
+    archived_by: str | None = None
 
 
 class ReviewRequest(BaseModel):
