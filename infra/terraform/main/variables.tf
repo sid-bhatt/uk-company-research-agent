@@ -3,10 +3,15 @@ variable "region" {
   default = "eu-north-1"
 }
 
-variable "github_repo" {
-  description = "owner/name of the repository allowed to deploy (main branch only)."
+variable "github_oidc_subject_prefix" {
+  description = <<-EOT
+    The repository part of GitHub's OIDC subject claim; only its main branch may deploy.
+    This repo uses GitHub's immutable subject format (owner and repo IDs, so a deleted and
+    re-created repo with the same name can't deploy). Check with:
+      gh api repos/<owner>/<repo>/actions/oidc/customization/sub   (sub_claim_prefix)
+  EOT
   type        = string
-  default     = "sid-bhatt/uk-company-research-agent"
+  default     = "repo:sid-bhatt@70953578/uk-company-research-agent@1393059532"
 }
 
 variable "instance_type" {

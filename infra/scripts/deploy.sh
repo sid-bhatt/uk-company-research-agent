@@ -18,7 +18,7 @@ if aws ecr describe-images --region "$AWS_REGION" --repository-name "${ECR_REPOS
 else
   aws ecr get-login-password --region "$AWS_REGION" |
     docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}" >/dev/null
-  docker buildx build --platform linux/arm64 --build-arg GIT_SHA="$SHA" \
+  docker buildx build --platform linux/arm64 --provenance=false --build-arg GIT_SHA="$SHA" \
     --tag "$IMAGE" --push backend
 fi
 
