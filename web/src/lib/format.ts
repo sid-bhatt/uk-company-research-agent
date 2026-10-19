@@ -27,6 +27,7 @@ export function date(value: string | null | undefined): string {
 export const RULE_LABELS: Record<string, string> = {
   overdue_accounts: "Overdue accounts",
   overdue_confirmation_statement: "Overdue confirmation statement",
+  company_status: "Insolvency, closure or strike-off",
   director_churn: "Director turnover",
   psc_changes: "Ownership (PSC) changes",
   office_changes: "Registered office changes",

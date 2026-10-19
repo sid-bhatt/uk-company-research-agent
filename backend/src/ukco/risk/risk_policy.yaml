@@ -4,15 +4,28 @@
 # The values are deliberately in config, not code: policy changes shouldn't need a
 # deploy, and every report records the hash of the policy that produced it.
 
-version: 1
+version: 2
 
-# Points per severity. Risk score = sum of points over flags, capped at 100.
+# Points per severity. Risk score = sum of points over flags, capped at 100; a knockout
+# flag (see company_status) sets it to 100 outright.
 points:
   low: 5
   medium: 15
   high: 30
 
 rules:
+  company_status:
+    # Insolvent or closed: a KYB knockout, whatever else the report finds.
+    # Live checks read the register status; back-tests use dated filings only.
+    knockout_statuses: [liquidation, administration, receivership, insolvency-proceedings, voluntary-arrangement, dissolved, converted-closed, removed]
+    knockout_filing_prefixes: [LIQ, AM, COCOMP, "4.", "2.", GAZ2]
+    # Being struck off: the company applied to close (DS01) or Companies House proposed it
+    # (GAZ1), and no later withdrawal (DS02) was filed. Serious, but not a knockout.
+    strike_off_filing_prefixes: [DS01, GAZ1]
+    strike_off_withdrawal_prefixes: [DS02]
+    strike_off_window_months: 12
+    strike_off_severity: high
+
   overdue_accounts:
     # Severity by days past the filing deadline.
     severity_by_days_overdue:

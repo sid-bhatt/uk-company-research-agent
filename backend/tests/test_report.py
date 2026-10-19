@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from sqlalchemy import Engine
 
-from tests.fakes import ACTIVE, FakeCompaniesHouse
+from tests.fakes import ACTIVE, LIQUIDATION, FakeCompaniesHouse
 from tests.ixbrl_builder import micro_accounts
 from ukco.report import render_markdown, validate_report
 from ukco.report.narrative import (
@@ -107,6 +107,18 @@ async def test_report_is_complete_valid_and_cited(engine: Engine) -> None:
     md = render_markdown(report)
     assert "Financial deterioration" in md and "Risk score 15/100" in md
     assert "find-and-update.company-information.service.gov.uk" in md
+
+
+@pytest.mark.integration
+async def test_liquidated_company_report_is_a_valid_knockout(engine: Engine) -> None:
+    """Live smoke test, v1: a company in liquidation came out at score 0. Now it's a knockout
+    the validator accepts (score 100 rather than the sum of flag points)."""
+    async with FakeCompaniesHouse().client() as client:
+        report = await generate_report(client, engine, LIQUIDATION)
+    assert report.risk_score == 100
+    assert report.flags[0].flag_type == "company_status" and report.flags[0].details["knockout"]
+    assert validate_report(report, DbEvidenceStore(engine)) == []
+    assert "Risk score 100/100" in render_markdown(report)
 
 
 @pytest.mark.integration

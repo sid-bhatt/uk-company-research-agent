@@ -94,9 +94,11 @@ def validate_report(report: RiskReport, store: EvidenceStore) -> list[str]:
     for flag in report.flags:
         check_ids(f"flag {flag.id}", flag.evidence_ids)
 
-    expected = min(100, sum(f.points for f in report.flags))
+    knockout = any(f.details.get("knockout") for f in report.flags)
+    expected = 100 if knockout else min(100, sum(f.points for f in report.flags))
     if report.risk_score != expected:
-        problems.append(f"risk score {report.risk_score} != sum of flag points {expected}")
+        basis = "a knockout flag" if knockout else "sum of flag points"
+        problems.append(f"risk score {report.risk_score} != {basis} {expected}")
 
     flag_ids = {f.id for f in report.flags}
     for check in report.checks:

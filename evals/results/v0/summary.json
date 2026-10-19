@@ -1,7 +1,7 @@
 {
   "as_of": "2024-09-30",
   "window_months": 18,
-  "policy_sha256": "fd57dc20b7b3dd10f6b6e739cd0ca8513157e154c9a63f77adef67b539c3a173",
+  "policy_sha256": "e34f48cc8e38c85e5dd36a28fc9a7663c0276559d694a0a219bdf0cfd1552bae",
   "companies": 60,
   "outcomes": {
     "compulsory_strike_off": 20,

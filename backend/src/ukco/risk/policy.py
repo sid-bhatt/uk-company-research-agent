@@ -27,6 +27,15 @@ class ChangesBand(_Strict):
     severity: Severity
 
 
+class CompanyStatusRule(_Strict):
+    knockout_statuses: list[str]
+    knockout_filing_prefixes: list[str]
+    strike_off_filing_prefixes: list[str]
+    strike_off_withdrawal_prefixes: list[str]
+    strike_off_window_months: int
+    strike_off_severity: Severity
+
+
 class OverdueRule(_Strict):
     severity_by_days_overdue: list[DaysBand]
 
@@ -66,6 +75,7 @@ class FinancialRule(_Strict):
 
 
 class Rules(_Strict):
+    company_status: CompanyStatusRule
     overdue_accounts: OverdueRule
     overdue_confirmation_statement: OverdueRule
     director_churn: ChangesRule

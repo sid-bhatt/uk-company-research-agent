@@ -91,6 +91,7 @@ class CompanyProfile(_Model):
     company_number: str
     company_name: str
     company_status: str | None = None
+    company_status_detail: str | None = None  # e.g. active-proposal-to-strike-off
     type: str | None = None
     jurisdiction: str | None = None
     date_of_creation: dt.date | None = None

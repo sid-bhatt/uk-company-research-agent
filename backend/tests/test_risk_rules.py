@@ -474,7 +474,7 @@ async def test_score_is_capped_at_100() -> None:
 
 def test_policy_is_strict_and_hashed(tmp_path) -> None:
     policy = default_policy()
-    assert len(policy.sha256) == 64 and policy.version == 1
+    assert len(policy.sha256) == 64 and policy.version == 2
     bad = tmp_path / "policy.yaml"
     bad.write_text(DEFAULT_POLICY.read_text() + "\nunexpected_key: 1\n")
     with pytest.raises(ValueError):
@@ -496,3 +496,45 @@ async def test_back_test_bundle_uses_the_accounts_filed_by_as_of() -> None:
 
     assert [str(d.filed_on) for d in today_view] == ["2025-04-15", "2024-04-30"]
     assert [str(d.filed_on) for d in back_test] == ["2023-10-01", "2022-11-20"]
+
+
+# --- Company status ---------------------------------------------------------------------
+
+
+async def test_a_company_in_liquidation_is_a_knockout() -> None:
+    """Found in the v1 smoke test: a liquidated company scored 0, because the deadline
+    rules stand down for it and nothing else looked at its status."""
+    live = await run(FakeCompaniesHouse(), LIQUIDATION)
+    flag = outcome(live, "company_status").flags[0]
+    assert flag.details["knockout"] is True and flag.severity == "high"
+    assert flag.evidence[0].pointer == "/company_status"
+    assert live.risk_score == 100
+
+    # Back-test: the first insolvency filing (LIQ01, 2024-04-14) is the cut-off.
+    before = await run(FakeCompaniesHouse(), LIQUIDATION, as_of=dt.date(2024, 4, 1))
+    assert outcome(before, "company_status").status == "clear"
+    after = await run(FakeCompaniesHouse(), LIQUIDATION, as_of=dt.date(2024, 5, 1))
+    assert outcome(after, "company_status").flags[0].details["filing_types"] == ["LIQ01"]
+    assert after.risk_score == 100
+
+
+async def test_strike_off_is_flagged_unless_withdrawn() -> None:
+    ch = FakeCompaniesHouse()
+    history = edit(ch, f"/company/{ACTIVE}/filing-history")
+    gaz1 = {**history["items"][0], "type": "GAZ1", "date": "2026-08-04",
+            "transaction_id": "StrikeOff0001"}  # fmt: skip
+    history["items"].insert(0, gaz1)
+
+    flagged = await run(ch, ACTIVE)
+    flag = outcome(flagged, "company_status").flags[0]
+    assert flag.severity == "high" and "knockout" not in flag.details
+    assert flagged.risk_score < 100
+
+    ds02 = {**gaz1, "type": "DS02", "date": "2026-08-20", "transaction_id": "Withdrawn0001"}
+    history["items"].insert(0, ds02)
+    assert outcome(await run(ch, ACTIVE), "company_status").status == "clear"
+
+
+async def test_an_active_company_is_clear() -> None:
+    result = await run(FakeCompaniesHouse(), ACTIVE)
+    assert outcome(result, "company_status").status == "clear"

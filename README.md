@@ -4,16 +4,19 @@ Enter a UK company number and get a **structured, cited risk report** that a com
 analyst reviews and approves: the Know-Your-Business check fintechs run before onboarding
 a business customer.
 
-**Status:** 🚧 Week 2 of 3 toward a deployed v1: reports work end to end in the web app, API, CLI and MCP. See [docs/PLAN.md](docs/PLAN.md).
+**Live:** [ukco-kyb.vercel.app](https://ukco-kyb.vercel.app) (GitHub sign-in, invite-only) ·
+API on AWS · **v1 shipped** after 18 days of a [3-week plan](docs/PLAN.md); evals and
+observability next.
 
 ## What the report contains
 1. **Snapshot:** status, age, SIC codes, registered-office history, officers, people with significant control.
 2. **Red flags**, each with severity, a one-line explanation, and a citation to the exact source
    (API record or filing page):
-   overdue accounts / confirmation statement · director churn · officers linked to many
-   failed companies · recent ownership (PSC) changes · frequent office moves ·
-   very new company in a high-risk sector · financial deterioration in filed accounts.
-3. **Risk score (0–100)** with every contributing reason.
+   **insolvent, closed or being struck off (a knockout)** · overdue accounts / confirmation
+   statement · director churn · officers linked to many failed companies · recent ownership
+   (PSC) changes · frequent office moves · very new company in a high-risk sector · financial
+   deterioration in filed accounts.
+3. **Risk score (0–100)** with every contributing reason; a knockout sets it to 100.
 4. **Review:** the analyst confirms or dismisses each flag (dismissing needs a written reason), then approves or rejects the customer (only once every flag is reviewed). Every decision goes into an append-only audit trail.
 
 **Design principle:** deterministic rules for everything computable from register data; the
@@ -28,21 +31,51 @@ liquidation, administration) in the following 18 months.
 
 ## Architecture
 
-_Diagram lands in week 3._ Data model: [docs/data-model.md](docs/data-model.md). API usage and rate budget: [docs/companies-house-api.md](docs/companies-house-api.md).
+```mermaid
+flowchart LR
+    analyst([Analyst]) -->|GitHub sign-in| web
+    subgraph vercel[Vercel]
+        web[Next.js web app<br/>backend-for-frontend]
+    end
+    subgraph aws["AWS eu-north-1: one server (ADR-005)"]
+        caddy[Caddy<br/>HTTPS] --> api[FastAPI<br/>report jobs · SSE · reviews · chat]
+        api --> db[(Postgres + pgvector<br/>evidence · reports · audit trail)]
+        db -.->|nightly dump| s3[(S3)]
+    end
+    web -->|short-lived signed JWT| caddy
+    api -->|rate-limited, every response snapshotted| ch[Companies House API<br/>+ iXBRL accounts]
+    api -.->|optional: summaries, chat| claude[Claude API]
+    gh[GitHub Actions] -->|OIDC, no stored keys| ecr[(ECR)] & ssm[SSM Run Command]
+    ssm --> api
+```
 
-| Layer | Tech |
+| Layer | What's built |
 |---|---|
-| Ingestion + monitoring | Python package; Airflow re-checks watchlisted companies nightly |
-| Storage + search | Postgres + pgvector (semantic) + full-text search |
-| Risk engine | Deterministic rules + versioned risk policy; LLM for explanations (structured output) |
-| Agent | Analyst follow-up chat; tools also exposed as an MCP server |
-| API | FastAPI, server-sent events for streaming |
-| Frontend | Next.js / TypeScript, GitHub sign-in |
-| Evals | Golden question set, run in GitHub Actions |
-| Observability | Langfuse tracing: cost + latency per query |
-| Infra | AWS (ECS Fargate, RDS, ECR) via Terraform |
+| Data | Async Companies House client (rate limit, retries, cache); every response stored as evidence with a content hash |
+| Financials | iXBRL parser for filed accounts (no OCR needed for most small companies, [ADR-004](docs/adr/0004-pivot-to-kyb-due-diligence.md)) |
+| Risk engine | 9 deterministic rules, point-in-time (`as_of`), versioned [`risk_policy.yaml`](backend/src/ukco/risk/risk_policy.yaml); every flag cites its records |
+| LLM | Claude for the summary and per-flag explanations (structured output, citation-checked), and a "why is this flagged?" chat agent with read-only tools. Off without a key; reports are complete without it |
+| Review | Confirm/dismiss flags, approve/reject; append-only audit trail enforced by a DB trigger |
+| Interfaces | FastAPI (SSE progress), Next.js web app, CLI, MCP server |
+| Evals | Point-in-time outcome back-test on a frozen snapshot, AUC gate in CI |
+| Observability | OpenTelemetry → Langfuse; per-report timings, Companies House call counts, cost |
+| Infra | Terraform, Docker, GitHub Actions CI + deploy (OIDC), Vercel |
 
-Design decisions and trade-offs are recorded in [docs/adr/](docs/adr/).
+Data model: [docs/data-model.md](docs/data-model.md) · API rate budget:
+[docs/companies-house-api.md](docs/companies-house-api.md) · Decisions: [docs/adr/](docs/adr/).
+
+## Trade-offs (and what I'd change at scale)
+
+- **One server, not ECS + RDS + load balancer** ([ADR-005](docs/adr/0005-lean-single-server-hosting.md)):
+  about $10/month instead of about $50. It costs a minute of downtime per deploy and has no
+  failover; backups are nightly (lose at most a day). The image and settings don't change
+  if it moves to ECS, so scaling up is an infrastructure change, not a rewrite.
+- **Rules first, LLM second:** a compliance team must be able to explain every flag to an
+  auditor, so the score never depends on a model. The LLM explains; it doesn't decide.
+- **Report jobs run inside the API process:** simple, and fine at demo volume; a queue and
+  workers come before any real traffic.
+- **The risk score is a weak predictor so far** (AUC 0.68, below). It's measured honestly
+  against what actually happened to companies, and beating it is the next milestone.
 
 ## Run locally
 
@@ -115,6 +148,13 @@ Live: web app on Vercel, API on one small AWS server in `eu-north-1`
   deploy time; never in git or the image.
 - **Access:** GitHub sign-in with an allow-list (`AUTH_ALLOWED_USERS`), plus daily per-user
   and site-wide limits on reports and chat.
+
+## Smoke test
+
+Six real companies on the live system ([docs/smoke-test-v1.md](docs/smoke-test-v1.md)): all
+succeeded in under 2 s. It also caught a critical gap before launch: a company **in
+liquidation** scored 0, because nothing checked the company's own status. It's now a knockout
+rule, with a regression test.
 
 ## Eval results
 

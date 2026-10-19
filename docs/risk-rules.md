@@ -1,4 +1,4 @@
-# KYB risk rules (v1)
+# KYB risk rules (policy v2)
 
 Deterministic rules over Companies House register data (`backend/src/ukco/risk/rules.py`),
 thresholds in [`risk_policy.yaml`](../backend/src/ukco/risk/risk_policy.yaml) (illustrative).
@@ -11,6 +11,7 @@ that are only known "as of now" report *not assessed* instead of leaking the fut
 
 | Rule | Data | Live | Back-test | Caveats |
 |---|---|---|---|---|
+| **Company status** *(knockout)* | Profile `company_status`; insolvency/closure filings (`LIQ*`, `AM*`, `COCOMP`, `GAZ2`, old `4.`/`2.` forms); strike-off filings (`DS01`, `GAZ1`) | Register status: liquidation, administration, receivership, voluntary arrangement, dissolved or closed → **knockout (score 100)**; "proposal to strike off" → high | Same, from dated filings only | Added after the v1 smoke test: a company in liquidation scored 0, because the deadline rules correctly stand down for it and nothing else looked at its status. A strike-off withdrawn by a later `DS02` doesn't count |
 | **Overdue accounts** | Profile `accounts`; `AA` filings' made-up dates | Register's `next_due` / `overdue` | Computed deadline (9 months private, 6 plc; first accounts 21/18 months) | Not modelled: ARD changes, extensions. Computed deadlines are tested against the register's (exact for the small-company fixture, ±7 days for Greggs' 52-week year) |
 | **Overdue confirmation statement** | Profile `confirmation_statement`; `CS01`/`AR01` | Register | Computed (12 months + 14 days) | |
 | **Director churn** | Company officer list (appointed/resigned dates) | ✓ | ✓ | Ignores the initial board (first 30 days) and same-day resign + re-appoint (role changes) |

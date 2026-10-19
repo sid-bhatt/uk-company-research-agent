@@ -43,6 +43,8 @@ def assess(
         policy_version=policy.version,
         policy_sha256=policy.sha256,
         outcomes=outcomes,
-        risk_score=min(MAX_SCORE, sum(c.points for c in contributions)),
+        risk_score=MAX_SCORE
+        if any(f.details.get("knockout") for o in outcomes for f in o.flags)
+        else min(MAX_SCORE, sum(c.points for c in contributions)),
         contributions=contributions,
     )

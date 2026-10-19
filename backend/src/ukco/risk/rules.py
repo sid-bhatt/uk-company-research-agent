@@ -115,6 +115,100 @@ def _closed_or_insolvent(ctx: RuleContext) -> str | None:
 # --- Rules -----------------------------------------------------------------------------
 
 
+def company_status(ctx: RuleContext) -> RuleOutcome:
+    """Insolvent or closed (a knockout), or being struck off."""
+    rule, cfg = "company_status", ctx.policy.rules.company_status
+    status = ctx.bundle.profile.company_status
+    if ctx.live and status in cfg.knockout_statuses:
+        return RuleOutcome(
+            rule=rule,
+            status="flagged",
+            flags=[
+                ctx.flag(
+                    rule,
+                    "high",
+                    f"Company is in {status.replace('-', ' ')}",
+                    f"The register shows the company's status as '{status}'. This is a "
+                    "knockout: the risk score is set to 100.",
+                    [ctx.profile("/company_status")],
+                    company_status=status,
+                    knockout=True,
+                )
+            ],
+        )
+    closures = [
+        f
+        for f in ctx.filings()
+        if f.type and f.type.startswith(tuple(cfg.knockout_filing_prefixes))
+    ]
+    if closures:
+        first = min(closures, key=lambda f: f.date or ctx.as_of)
+        return RuleOutcome(
+            rule=rule,
+            status="flagged",
+            flags=[
+                ctx.flag(
+                    rule,
+                    "high",
+                    "Insolvency or closure filed",
+                    f"{len(closures)} insolvency or closure filing(s) on or before "
+                    f"{ctx.as_of}, the first ({first.type}) on {first.date}. This is a "
+                    "knockout: the risk score is set to 100.",
+                    [ctx.filing(f) for f in closures],
+                    filing_types=sorted({f.type for f in closures if f.type}),
+                    knockout=True,
+                )
+            ],
+        )
+
+    strike_off = [
+        f
+        for f in ctx.filings()
+        if f.type
+        and f.type.startswith(tuple(cfg.strike_off_filing_prefixes))
+        and _in_window(f.date, ctx, cfg.strike_off_window_months)
+    ]
+    withdrawn = [
+        f.date
+        for f in ctx.filings()
+        if f.type and f.type.startswith(tuple(cfg.strike_off_withdrawal_prefixes)) and f.date
+    ]
+    latest = max(strike_off, key=lambda f: f.date or ctx.as_of) if strike_off else None
+    proposed_live = ctx.live and ctx.bundle.profile.company_status_detail == (
+        "active-proposal-to-strike-off"
+    )
+    if (latest and not any(latest.date and d > latest.date for d in withdrawn)) or proposed_live:
+        evidence = [ctx.filing(f) for f in strike_off]
+        if proposed_live:
+            evidence.insert(0, ctx.profile("/company_status_detail"))
+        what = (
+            "The register shows a proposal to strike the company off"
+            if proposed_live
+            else f"Strike-off filing {latest.type} on {latest.date}"  # type: ignore[union-attr]
+        )
+        return RuleOutcome(
+            rule=rule,
+            status="flagged",
+            flags=[
+                ctx.flag(
+                    rule,
+                    cfg.strike_off_severity,
+                    "Company is being struck off",
+                    f"{what}; a struck-off company is dissolved and stops existing.",
+                    evidence,
+                    filing_types=sorted({f.type for f in strike_off if f.type}),
+                )
+            ],
+        )
+    note = (
+        f"Status '{status}'; no insolvency, closure or live strike-off filings."
+        if ctx.live
+        else "No insolvency, closure or strike-off filings by this date "
+        "(dated filings only; the current status isn't used in back-tests)."
+    )
+    return RuleOutcome(rule=rule, status="clear", note=note)
+
+
 def overdue_accounts(ctx: RuleContext) -> RuleOutcome:
     rule = "overdue_accounts"
     if reason := _closed_or_insolvent(ctx):
@@ -634,6 +728,7 @@ def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
 
 
 RULES: list[Callable[[RuleContext], RuleOutcome]] = [
+    company_status,
     overdue_accounts,
     overdue_confirmation_statement,
     director_churn,
