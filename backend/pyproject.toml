@@ -19,6 +19,7 @@ dependencies = [
     "opentelemetry-sdk>=1.45.0",
     "opentelemetry-exporter-otlp-proto-http>=1.45.0",
     "pyjwt>=2.15.1",
+    "openai>=3.40.0",
 ]
 
 [project.scripts]

@@ -1,6 +1,7 @@
 """The report chat agent: answers an analyst's questions about one stored report.
 
-A manual tool loop on Claude (Opus 5.5) with four read-only tools scoped to that report.
+A manual tool loop with four read-only tools scoped to that report, on Claude (Opus 5.5) or
+any OpenAI-compatible API (by default Gemini's free tier).
 The report id is bound server-side, so a conversation can only ever read its own report.
 
 History is append-only and replayed verbatim: every message (assistant content blocks
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import anthropic
+import openai
 from anthropic.types.beta import (
     BetaOutputConfigParam,
     BetaThinkingConfigAdaptiveParam,
@@ -188,18 +190,35 @@ class ReportTools:
         }
 
 
+@dataclass
+class Step:
+    """One model call's result, with the assistant turn in the stored (canonical) block shape."""
+
+    blocks: list[dict[str, Any]]
+    usage: dict[str, Any]
+    input_tokens: int
+    output_tokens: int
+    refused: bool = False
+    truncated: bool = False
+
+
 class ChatAgent:
-    def __init__(
-        self,
-        client: anthropic.AsyncAnthropic,
-        engine: Engine,
-        *,
-        model: str = "claude-opus-5-5",
-        effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium",
-        max_tokens: int = 16000,
-    ) -> None:
-        self.client, self.engine, self.model, self.max_tokens = client, engine, model, max_tokens
-        self.effort: Literal["low", "medium", "high", "xhigh", "max"] = effort
+    """The provider-independent loop: history, tools, limits, citations, cost.
+
+    History is stored in one canonical shape (the Anthropic Messages content blocks: text,
+    tool_use, tool_result), whichever provider answers, so transcripts read the same in the
+    audit trail. Each provider translates it in `_step`.
+    """
+
+    agent_version = AGENT_VERSION
+    system = "anthropic"
+
+    def __init__(self, engine: Engine, *, model: str) -> None:
+        self.engine, self.model = engine, model
+
+    def _step(self, history: list[dict[str, Any]]) -> AsyncIterator[str | Step]:
+        """Yield the answer text as it arrives, then exactly one Step."""
+        raise NotImplementedError
 
     async def ask(
         self,
@@ -215,14 +234,14 @@ class ChatAgent:
 
         if conversation_id is None:
             conversation_id = store.create_conversation(
-                self.engine, report_id, user, agent_version=AGENT_VERSION, model=self.model
+                self.engine, report_id, user, agent_version=self.agent_version, model=self.model
             )
             history: list[dict[str, Any]] = []
         else:
             conv = store.get_conversation(self.engine, conversation_id)
             if conv is None or conv["report_id"] != report_id or conv["user"] != user:
                 raise ChatError("conversation not found")
-            if conv["agent_version"] != AGENT_VERSION:
+            if conv["agent_version"] != self.agent_version:
                 raise ChatError(
                     "this conversation is from an older assistant version; start a new one"
                 )
@@ -250,50 +269,47 @@ class ChatAgent:
             )
             answer = ""
             for _ in range(MAX_STEPS):
+                step: Step | None = None
                 try:
-                    async with self._stream(history) as stream:
-                        async for event in stream:  # forward the answer as it's written
-                            if event.type == "text" and event.text:
-                                answer += event.text
-                                yield ChatEvent("text", {"text": event.text})
-                        message = await stream.get_final_message()
-                except anthropic.APIError as exc:
+                    async for item in self._step(history):  # forward the answer as it's written
+                        if isinstance(item, Step):
+                            step = item
+                        elif item:
+                            answer += item
+                            yield ChatEvent("text", {"text": item})
+                except (anthropic.APIError, openai.APIError, ChatError) as exc:
                     span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
                     yield ChatEvent(
                         "error", {"message": "The assistant is unavailable; try again shortly."}
                     )
                     return
-                blocks = [b.model_dump(mode="json", exclude_none=True) for b in message.content]
+                assert step is not None
                 store.append(
-                    self.engine,
-                    conversation_id,
-                    "assistant",
-                    blocks,
-                    usage=message.usage.model_dump(mode="json"),
+                    self.engine, conversation_id, "assistant", step.blocks, usage=step.usage
                 )
-                history.append({"role": "assistant", "content": blocks})
-                usage["input_tokens"] += message.usage.input_tokens
-                usage["output_tokens"] += message.usage.output_tokens
+                history.append({"role": "assistant", "content": step.blocks})
+                usage["input_tokens"] += step.input_tokens
+                usage["output_tokens"] += step.output_tokens
 
-                if message.stop_reason == "refusal":
+                if step.refused:
                     yield ChatEvent("error", {"message": "The assistant declined to answer that."})
                     return
-                tool_uses = [b for b in message.content if b.type == "tool_use"]
+                tool_uses = [b for b in step.blocks if b["type"] == "tool_use"]
                 if not tool_uses:
                     break
-                if message.stop_reason == "max_tokens":  # a truncated tool input: don't run it
+                if step.truncated:  # a truncated tool input: don't run it
                     yield ChatEvent(
                         "error", {"message": "The answer was cut off; try a narrower question."}
                     )
                     return
                 results = []
                 for block in tool_uses:
-                    yield ChatEvent("tool", {"name": block.name, "input": block.input})
-                    output, is_error = tools.run(block.name, block.input)
+                    yield ChatEvent("tool", {"name": block["name"], "input": block["input"]})
+                    output, is_error = tools.run(block["name"], block["input"])
                     results.append(
                         {
                             "type": "tool_result",
-                            "tool_use_id": block.id,
+                            "tool_use_id": block["id"],
                             "content": output,
                             **({"is_error": True} if is_error else {}),
                         }
@@ -315,6 +331,7 @@ class ChatAgent:
                 span,
                 model=self.model,
                 served_by=None,
+                system=self.system,
                 input_tokens=usage["input_tokens"],
                 output_tokens=usage["output_tokens"],
                 cost_usd=cost,
@@ -336,6 +353,42 @@ class ChatAgent:
             },
         )
 
+
+class ClaudeChatAgent(ChatAgent):
+    """Claude (Opus 5.5) with adaptive thinking, streamed.
+
+    History is replayed verbatim, which Opus 5.5's preserved thinking requires (thinking is
+    tied to an unchanged prefix).
+    """
+
+    def __init__(
+        self,
+        client: anthropic.AsyncAnthropic,
+        engine: Engine,
+        *,
+        model: str = "claude-opus-5-5",
+        effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium",
+        max_tokens: int = 16000,
+    ) -> None:
+        super().__init__(engine, model=model)
+        self.client, self.max_tokens = client, max_tokens
+        self.effort: Literal["low", "medium", "high", "xhigh", "max"] = effort
+
+    async def _step(self, history: list[dict[str, Any]]) -> AsyncIterator[str | Step]:
+        async with self._stream(history) as stream:
+            async for event in stream:
+                if event.type == "text" and event.text:
+                    yield event.text
+            message = await stream.get_final_message()
+        yield Step(
+            blocks=[b.model_dump(mode="json", exclude_none=True) for b in message.content],
+            usage=message.usage.model_dump(mode="json"),
+            input_tokens=message.usage.input_tokens,
+            output_tokens=message.usage.output_tokens,
+            refused=message.stop_reason == "refusal",
+            truncated=message.stop_reason == "max_tokens",
+        )
+
     def _stream(self, history: list[dict[str, Any]]) -> Any:
         thinking: BetaThinkingConfigAdaptiveParam = {
             "type": "adaptive",
@@ -355,3 +408,124 @@ class ChatAgent:
             betas=[FALLBACK_BETA, BINDING_BETA],
             fallbacks="default",
         )
+
+
+class OpenAICompatibleChatAgent(ChatAgent):
+    """Any OpenAI-compatible Chat Completions API (by default Gemini's free tier).
+
+    Not streamed: answers are a few sentences, and tool-call deltas differ between servers.
+    Provider extras on a tool call (Gemini's thought signatures) are stored with the
+    tool_use block and sent back unchanged, as those servers require.
+    """
+
+    agent_version = AGENT_VERSION + "-oai"
+
+    def __init__(
+        self,
+        client: openai.AsyncOpenAI,
+        engine: Engine,
+        *,
+        model: str = "gemini-3.5-flash",
+        max_tokens: int = 8000,
+    ) -> None:
+        super().__init__(engine, model=model)
+        self.client, self.max_tokens = client, max_tokens
+        self.system = str(client.base_url.host)
+
+    async def _step(self, history: list[dict[str, Any]]) -> AsyncIterator[str | Step]:
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=to_openai_messages(history),  # type: ignore[arg-type]
+            tools=OPENAI_TOOLS,  # type: ignore[arg-type]
+        )
+        if not response.choices:
+            raise ChatError("no choices in the response")
+        choice = response.choices[0]
+        message = choice.message
+        blocks: list[dict[str, Any]] = []
+        if message.content:
+            blocks.append({"type": "text", "text": message.content})
+            yield message.content
+        for n, call in enumerate(message.tool_calls or []):
+            if call.type != "function":
+                continue
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = None  # ReportTools.run rejects it and tells the model
+            block: dict[str, Any] = {
+                "type": "tool_use",
+                "id": call.id or f"call_{len(history)}_{n}",
+                "name": call.function.name,
+                "input": args,
+            }
+            if call.model_extra:
+                block["provider_extra"] = call.model_extra
+            blocks.append(block)
+        usage = response.usage
+        yield Step(
+            blocks=blocks,
+            usage=usage.model_dump(mode="json") if usage else {},
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            refused=choice.finish_reason == "content_filter" or bool(message.refusal),
+            truncated=choice.finish_reason == "length",
+        )
+
+
+def _openai_parameters(schema: dict[str, Any]) -> dict[str, Any]:
+    """Our strict schemas, loosened for servers that reject empty `required` lists."""
+    out = {k: v for k, v in schema.items() if k != "additionalProperties"}
+    if not out.get("required"):
+        out.pop("required", None)
+    return out
+
+
+OPENAI_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": t["name"],
+            "description": t.get("description", ""),
+            "parameters": _openai_parameters(dict(t["input_schema"])),
+        },
+    }
+    for t in TOOLS
+]
+
+
+def to_openai_messages(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Canonical stored history → Chat Completions messages (system prompt first)."""
+    out: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for message in history:
+        blocks = message["content"]
+        if message["role"] == "assistant":
+            text = "".join(b["text"] for b in blocks if b["type"] == "text")
+            calls = [
+                {
+                    "id": b["id"],
+                    "type": "function",
+                    "function": {"name": b["name"], "arguments": json.dumps(b["input"])},
+                    **b.get("provider_extra", {}),
+                }
+                for b in blocks
+                if b["type"] == "tool_use"
+            ]
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": text or None,
+                    **({"tool_calls": calls} if calls else {}),
+                }
+            )
+            continue
+        for b in blocks:
+            if b["type"] == "tool_result":
+                out.append(
+                    {"role": "tool", "tool_call_id": b["tool_use_id"], "content": b["content"]}
+                )
+        texts = [b["text"] for b in blocks if b["type"] == "text"]
+        if texts:
+            out.append({"role": "user", "content": "\n\n".join(texts)})
+    return out

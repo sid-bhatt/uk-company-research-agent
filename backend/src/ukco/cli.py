@@ -341,7 +341,7 @@ def report(
     ] = None,
     network: Annotated[bool, typer.Option(help="Check directors' other companies.")] = True,
     llm: Annotated[
-        bool, typer.Option(help="Add the LLM summary (needs ANTHROPIC_API_KEY).")
+        bool, typer.Option(help="Add the LLM summary (needs LLM_API_KEY or ANTHROPIC_API_KEY).")
     ] = True,
     out: Annotated[Path, typer.Option(help="Directory for the JSON + Markdown report.")] = Path(
         "../reports"

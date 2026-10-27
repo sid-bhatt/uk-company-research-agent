@@ -19,6 +19,7 @@ from ukco.report.narrative import (
     FALLBACK_BETA,
     ClaudeNarrativeWriter,
     NarrativeError,
+    OpenAICompatibleNarrativeWriter,
     add_narrative,
     unsupported_numbers,
 )
@@ -299,3 +300,77 @@ async def test_claude_writer_raises_on_unusable_responses(response: Any, message
     )
     with pytest.raises(NarrativeError, match=re.escape(message)):
         await ClaudeNarrativeWriter(client).write(report)
+
+
+# --- OpenAI-compatible writer (stub client, no network) ------------------------------------
+
+
+def _oai_response(finish: str, text: str | None) -> Any:
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason=finish,
+                message=SimpleNamespace(content=text, refusal=None),
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=2_000, completion_tokens=500),
+        model="gemini-3.5-flash",
+    )
+
+
+def _oai_client(response: Any) -> tuple[Any, StubMessages]:
+    completions = StubMessages(response)
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions),
+        base_url=SimpleNamespace(host="generativelanguage.googleapis.com"),
+    )
+    return client, completions
+
+
+def _empty_report() -> RiskReport:
+    return RiskReport.model_construct(
+        as_of=dt.date(2026, 9, 1),
+        live=True,
+        risk_score=0,
+        flags=[],
+        checks=[],
+        evidence=[],
+        company=SimpleNamespace(model_dump=lambda mode: {}),
+    )
+
+
+async def test_openai_compatible_writer_request_shape() -> None:
+    body = Narrative(
+        summary="s", summary_evidence_ids=[], flag_explanations=[], next_steps=[]
+    ).model_dump_json()
+    client, completions = _oai_client(_oai_response("stop", f"```json\n{body}\n```"))
+    narrative, run = await OpenAICompatibleNarrativeWriter(client).write(_empty_report())
+
+    req = completions.request
+    assert req["model"] == "gemini-3.5-flash"
+    assert req["messages"][0]["role"] == "system" and req["messages"][1]["role"] == "user"
+    assert req["response_format"]["json_schema"]["schema"]["required"] == [
+        "summary",
+        "summary_evidence_ids",
+        "flag_explanations",
+        "next_steps",
+    ]
+    assert narrative.summary == "s"  # a ```json fence is tolerated
+    assert run.cost_usd == 0 and run.input_tokens == 2_000 and run.served_by == "gemini-3.5-flash"
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        (_oai_response("content_filter", None), "declined"),
+        (_oai_response("length", "{"), "truncated"),
+        (_oai_response("stop", '{"summary": 1}'), "didn't match the schema"),
+    ],
+    ids=["filtered", "truncated", "bad-json"],
+)
+async def test_openai_compatible_writer_raises_on_unusable_responses(
+    response: Any, message: str
+) -> None:
+    client, _ = _oai_client(response)
+    with pytest.raises(NarrativeError, match=re.escape(message)):
+        await OpenAICompatibleNarrativeWriter(client).write(_empty_report())

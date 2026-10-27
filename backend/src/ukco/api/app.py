@@ -16,7 +16,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
-import anthropic
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -36,11 +35,12 @@ from ukco.api.schemas import (
     ReviewRequest,
 )
 from ukco.chat import store as chat_store
-from ukco.chat.agent import ChatAgent, ChatError
+from ukco.chat.agent import ChatAgent, ChatError, ClaudeChatAgent, OpenAICompatibleChatAgent
 from ukco.companies_house import CompaniesHouseClient, CompaniesHouseError, client_from_settings
 from ukco.companies_house.models import CompanySearchItem
 from ukco.config import check_production, get_settings
 from ukco.db import get_engine
+from ukco.llm import anthropic_client, openai_client
 from ukco.observability import setup_tracing, shutdown_tracing
 from ukco.report import render_markdown, store
 from ukco.report.narrative import NarrativeWriter
@@ -99,11 +99,19 @@ def _install(
 
 def chat_agent_from_settings(engine: Engine) -> "ChatAgent | None":
     settings = get_settings()
-    key = settings.anthropic_api_key
-    if not key or not key.get_secret_value().strip():
-        return None
-    client = anthropic.AsyncAnthropic(api_key=key.get_secret_value().strip())
-    return ChatAgent(client, engine, model=settings.llm_model, effort=settings.chat_effort)
+    match settings.llm_provider():
+        case "openai_compatible":
+            return OpenAICompatibleChatAgent(
+                openai_client(settings), engine, model=settings.llm_model
+            )
+        case "anthropic":
+            return ClaudeChatAgent(
+                anthropic_client(settings),
+                engine,
+                model=settings.anthropic_model,
+                effort=settings.chat_effort,
+            )
+    return None
 
 
 JWT_ISSUER, JWT_AUDIENCE = "ukco-web", "ukco-api"
@@ -327,7 +335,7 @@ def _routes(app: FastAPI) -> None:
         """Ask about a report. Streams server-sent events: conversation, tool, text, done/error."""
         agent: ChatAgent | None = request.app.state.chat_agent
         if agent is None:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "chat needs ANTHROPIC_API_KEY")
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "chat needs an LLM API key")
         row = _report_or_404(request, report_id)
         if row["status"] != "succeeded" or not row["payload"]:
             raise HTTPException(status.HTTP_409_CONFLICT, f"report {report_id} is {row['status']}")

@@ -30,3 +30,18 @@ def test_production_needs_secrets(secret, key, message: str) -> None:
 
 def test_production_with_secrets_starts() -> None:
     check_production(Settings(env="production", api_jwt_secret=SECRET, companies_house_api_key=KEY))
+
+
+@pytest.mark.parametrize(
+    ("llm_key", "anthropic_key", "provider"),
+    [
+        (None, None, None),
+        (SecretStr("  "), None, None),
+        (SecretStr("free"), None, "openai_compatible"),
+        (None, SecretStr("paid"), "anthropic"),
+        (SecretStr("free"), SecretStr("paid"), "openai_compatible"),  # the free one wins
+    ],
+)
+def test_llm_provider(llm_key, anthropic_key, provider) -> None:
+    settings = Settings(_env_file=None, llm_api_key=llm_key, anthropic_api_key=anthropic_key)  # type: ignore[call-arg]
+    assert settings.llm_provider() == provider

@@ -44,7 +44,7 @@ flowchart LR
     end
     web -->|short-lived signed JWT| caddy
     api -->|rate-limited, every response snapshotted| ch[Companies House API<br/>+ iXBRL accounts]
-    api -.->|optional: summaries, chat| claude[Claude API]
+    api -.->|optional: summaries, chat| llm[LLM API: Gemini free tier or Claude]
     gh[GitHub Actions] -->|OIDC, no stored keys| ecr[(ECR)] & ssm[SSM Run Command]
     ssm --> api
 ```
@@ -54,7 +54,7 @@ flowchart LR
 | Data | Async Companies House client (rate limit, retries, cache); every response stored as evidence with a content hash |
 | Financials | iXBRL parser for filed accounts (no OCR needed for most small companies, [ADR-004](docs/adr/0004-pivot-to-kyb-due-diligence.md)) |
 | Risk engine | 9 deterministic rules, point-in-time (`as_of`), versioned [`risk_policy.yaml`](backend/src/ukco/risk/risk_policy.yaml); every flag cites its records |
-| LLM | Claude for the summary and per-flag explanations (structured output, citation-checked), and a "why is this flagged?" chat agent with read-only tools. Off without a key; reports are complete without it |
+| LLM | Gemini (free tier, via any OpenAI-compatible API) or Claude for the summary and per-flag explanations (structured output, citation-checked), and a "why is this flagged?" chat agent with read-only tools. Off without a key; reports are complete without it |
 | Review | Confirm/dismiss flags, approve/reject; append-only audit trail enforced by a DB trigger |
 | Interfaces | FastAPI (SSE progress), Next.js web app, CLI, MCP server |
 | Evals | Point-in-time outcome back-test on a frozen snapshot, AUC gate in CI |
@@ -118,11 +118,11 @@ make api                                     # → http://localhost:8000/docs
 ## Assistants (MCP) and observability
 
 - **"Why is this flagged?" chat:** on the report page, an analyst can ask about the report.
-  Claude answers only from that report, using four read-only tools (a flag's cited records with
+  The model answers only from that report, using four read-only tools (a flag's cited records with
   their values, a check's policy thresholds, the company snapshot, the review history). Answers
   cite `[E3]`/`[F1]`; citations not in the report are flagged in the UI. Conversations are
   append-only and kept with the report (a DB trigger blocks edits), replayed verbatim each turn.
-  Off unless `ANTHROPIC_API_KEY` is set; capped at `CHAT_DAILY_QUESTIONS` per user per day.
+  Off unless `LLM_API_KEY` (free Gemini, or any OpenAI-compatible API) or `ANTHROPIC_API_KEY` is set; capped at `CHAT_DAILY_QUESTIONS` per user per day.
 - **MCP server:** `uv run ukco mcp` exposes `search_companies`, `get_risk_report`,
   `get_flag_evidence` and `officer_network` to Claude Desktop / Claude Code. Setup: [docs/mcp.md](docs/mcp.md).
 - **Tracing:** OpenTelemetry, exported to Langfuse (or any OTLP backend) when keys are set. One

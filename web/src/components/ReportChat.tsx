@@ -96,7 +96,7 @@ export function ReportChat({ reportId, flags, evidence }: { reportId: number; fl
 
       {unavailable ? (
         <p role="status" className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-          The assistant is switched off on this server (no Anthropic API key is configured).
+          The assistant is switched off on this server (no LLM API key is configured).
         </p>
       ) : (
         <>

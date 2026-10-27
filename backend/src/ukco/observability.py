@@ -91,11 +91,12 @@ def record_generation(
     cost_usd: float,
     prompt: str | None = None,
     completion: str | None = None,
+    system: str = "anthropic",
 ) -> None:
     """Mark a span as an LLM generation in Langfuse's OpenTelemetry mapping."""
     attributes: dict[str, Any] = {
         "langfuse.observation.type": "generation",
-        "gen_ai.system": "anthropic",
+        "gen_ai.system": system,
         "gen_ai.request.model": model,
         "gen_ai.response.model": served_by or model,
         "gen_ai.usage.input_tokens": input_tokens,

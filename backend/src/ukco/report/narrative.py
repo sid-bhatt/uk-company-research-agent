@@ -1,5 +1,8 @@
 """LLM narrative: an executive summary and a plain-English explanation per flag.
 
+Two writers with the same contract: Claude, and any OpenAI-compatible API (by default
+Google Gemini's free tier).
+
 The LLM never sees raw register data and never decides anything: it receives the
 finished deterministic report (flags, checks, snapshot, evidence labels) and writes
 prose that must cite the evidence ids it was given. Output is schema-constrained
@@ -15,6 +18,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Protocol
 
 import anthropic
+import openai
 from anthropic.types.beta import BetaOutputConfigParam
 from opentelemetry import trace
 from pydantic import ValidationError
@@ -27,7 +31,7 @@ PROMPT_VERSION = "narrative-v1"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
-# USD per million tokens (input, output). Opus 5.5 list price.
+# USD per million tokens (input, output). Opus 5.5 list price; free-tier models cost 0.
 PRICING: dict[str, tuple[float, float]] = {"claude-opus-5-5": (4.0, 20.0)}
 
 SYSTEM_PROMPT = """You write the narrative section of a KYB (know-your-business) risk report \
@@ -148,37 +152,127 @@ class ClaudeNarrativeWriter:
         if response.stop_reason == "max_tokens":
             raise NarrativeError("narrative truncated at max_tokens")
         text = next((b.text for b in response.content if b.type == "text"), None)
-        if text is None:
-            raise NarrativeError("no text in response")
-        try:
-            narrative = Narrative.model_validate_json(text)
-        except ValidationError as exc:
-            raise NarrativeError(
-                f"narrative didn't match the schema: {exc.error_count()} errors"
-            ) from exc
-
         usage = response.usage
-        price_in, price_out = PRICING.get(self.model, (0.0, 0.0))
-        cost = (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1_000_000
-        record_generation(
+        return _finish(
             span,
+            text,
             model=self.model,
             served_by=response.model,
+            system="anthropic",
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
-            cost_usd=cost,
-            prompt=prompt,
-            completion=text,
-        )
-        return narrative, LlmRun(
-            model=self.model,
-            prompt_version=PROMPT_VERSION,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cost_usd=round(cost, 6),
             latency_ms=latency_ms,
-            served_by=response.model,
+            prompt=prompt,
         )
+
+
+class OpenAICompatibleNarrativeWriter:
+    """Chat Completions with a JSON-schema response format (Gemini, Groq, OpenRouter, …)."""
+
+    def __init__(
+        self,
+        client: openai.AsyncOpenAI,
+        *,
+        model: str = "gemini-3.5-flash",
+        max_tokens: int = 16000,
+    ) -> None:
+        self.client, self.model, self.max_tokens = client, model, max_tokens
+
+    async def write(self, report: RiskReport) -> tuple[Narrative, LlmRun]:
+        prompt = narrative_input(report)
+        started = time.perf_counter()
+        with tracer().start_as_current_span("narrative.generate") as span:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "narrative",
+                        "schema": NARRATIVE_SCHEMA,
+                        "strict": True,
+                    },
+                },
+            )
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            if not response.choices:
+                raise NarrativeError("no choices in response")
+            choice = response.choices[0]
+            if choice.finish_reason == "content_filter" or choice.message.refusal:
+                raise NarrativeError(f"model declined ({choice.message.refusal or 'filter'})")
+            if choice.finish_reason == "length":
+                raise NarrativeError("narrative truncated at max_tokens")
+            usage = response.usage
+            return _finish(
+                span,
+                choice.message.content,
+                model=self.model,
+                served_by=response.model,
+                system=str(self.client.base_url.host),
+                input_tokens=usage.prompt_tokens if usage else 0,
+                output_tokens=usage.completion_tokens if usage else 0,
+                latency_ms=latency_ms,
+                prompt=prompt,
+            )
+
+
+def _finish(
+    span: trace.Span,
+    text: str | None,
+    *,
+    model: str,
+    served_by: str | None,
+    system: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    prompt: str,
+) -> tuple[Narrative, LlmRun]:
+    """Parse the model's JSON against the schema, record the generation, price it."""
+    if text is None:
+        raise NarrativeError("no text in response")
+    try:
+        narrative = Narrative.model_validate_json(_strip_fences(text))
+    except ValidationError as exc:
+        raise NarrativeError(
+            f"narrative didn't match the schema: {exc.error_count()} errors"
+        ) from exc
+
+    price_in, price_out = PRICING.get(model, (0.0, 0.0))
+    cost = (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    record_generation(
+        span,
+        model=model,
+        served_by=served_by,
+        system=system,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        prompt=prompt,
+        completion=text,
+    )
+    return narrative, LlmRun(
+        model=model,
+        prompt_version=PROMPT_VERSION,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=round(cost, 6),
+        latency_ms=latency_ms,
+        served_by=served_by,
+    )
+
+
+def _strip_fences(text: str) -> str:
+    """Some OpenAI-compatible servers wrap JSON output in a ```json fence."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.rsplit("```", 1)[0]
+    return text
 
 
 _NUMBER = re.compile(r"(?<![A-Za-z\d])\d[\d,]*(?:\.\d+)?")
@@ -213,14 +307,14 @@ async def add_narrative(report: RiskReport, writer: NarrativeWriter | None) -> R
         prov = prov.model_copy(
             update={
                 "narrative_status": "disabled",
-                "narrative_note": "No ANTHROPIC_API_KEY configured.",
+                "narrative_note": "No LLM API key configured.",
             }
         )
         return report.model_copy(update={"provenance": prov})
 
     try:
         narrative, run = await writer.write(report)
-    except (NarrativeError, anthropic.APIError) as exc:
+    except (NarrativeError, anthropic.APIError, openai.APIError) as exc:
         prov = prov.model_copy(
             update={"narrative_status": "failed", "narrative_note": str(exc)[:500]}
         )

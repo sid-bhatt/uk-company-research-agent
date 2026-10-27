@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Store the server's secrets in SSM Parameter Store (SecureString, under /ukco/).
-# Reads COMPANIES_HOUSE_API_KEY and ANTHROPIC_API_KEY from the repo's .env; generates
+# Reads COMPANIES_HOUSE_API_KEY, LLM_API_KEY and ANTHROPIC_API_KEY from the repo's .env; generates
 # POSTGRES_PASSWORD and API_JWT_SECRET once (existing values are never overwritten, so
 # re-running is safe). Prints names only, never values.
 #   make secrets   (uses your current AWS CLI login)
@@ -21,6 +21,7 @@ put() {  # name value overwrite
 
 echo "Writing secrets to SSM Parameter Store (${AWS_REGION:-$(aws configure get region)}):"
 put COMPANIES_HOUSE_API_KEY "$(value_from_env COMPANIES_HOUSE_API_KEY)" yes
+put LLM_API_KEY "$(value_from_env LLM_API_KEY)" yes
 put ANTHROPIC_API_KEY "$(value_from_env ANTHROPIC_API_KEY)" yes
 put POSTGRES_PASSWORD "$(openssl rand -base64 33 | tr -d '/+=' )" no
 put API_JWT_SECRET "$(openssl rand -base64 48 | tr -d '/+=')" no

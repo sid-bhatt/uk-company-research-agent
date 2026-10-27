@@ -5,7 +5,6 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-import anthropic
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import Engine, func
@@ -15,9 +14,15 @@ from ukco.companies_house import CompaniesHouseClient
 from ukco.config import get_settings
 from ukco.db.models import IngestionRun
 from ukco.ingest.company import fetch_bundle, persist_bundle, summarise
+from ukco.llm import anthropic_client, openai_client
 from ukco.observability import current_trace_id, tracer
 from ukco.report.build import build_report
-from ukco.report.narrative import ClaudeNarrativeWriter, NarrativeWriter, add_narrative
+from ukco.report.narrative import (
+    ClaudeNarrativeWriter,
+    NarrativeWriter,
+    OpenAICompatibleNarrativeWriter,
+    add_narrative,
+)
 from ukco.report.schema import RiskReport
 from ukco.report.validate import DbEvidenceStore, ReportInvalid, validate_report
 from ukco.risk import assess
@@ -25,11 +30,18 @@ from ukco.risk import assess
 
 def writer_from_settings() -> NarrativeWriter | None:
     settings = get_settings()
-    key = settings.anthropic_api_key
-    if not key or not key.get_secret_value().strip():
-        return None
-    client = anthropic.AsyncAnthropic(api_key=key.get_secret_value().strip())
-    return ClaudeNarrativeWriter(client, model=settings.llm_model, effort=settings.llm_effort)
+    match settings.llm_provider():
+        case "openai_compatible":
+            return OpenAICompatibleNarrativeWriter(
+                openai_client(settings), model=settings.llm_model
+            )
+        case "anthropic":
+            return ClaudeNarrativeWriter(
+                anthropic_client(settings),
+                model=settings.anthropic_model,
+                effort=settings.llm_effort,
+            )
+    return None
 
 
 async def generate_report(
