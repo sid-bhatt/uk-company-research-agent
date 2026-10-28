@@ -38,6 +38,16 @@ All reports succeeded and passed citation validation, each in under 2 seconds.
 4. **Known false positive:** director churn on large boards (Greggs medium, IKEA high) reflects
    normal rotation on big boards. Making churn relative to board size is in the plan.
 
-## Run 2: after the fix is deployed
+## Run 2: after the fix deployed (`main` b4f3496, policy v2)
 
-_To be filled in after this branch merges and deploys._
+| Searched | Company | Status | Report | Time | Score | Flags | Not assessed | Evidence | CH calls |
+|---|---|---|---|---|---|---|---|---|---|
+| `greggs` | GREGGS PLC (00502851) | active | succeeded | 1.7 s | 15 | director_churn (medium) | financial_deterioration | 7 | 20 |
+| `13235004` | ITEXP LTD (13235004) | active | succeeded | 1.0 s | 15 | financial_deterioration (medium) | none | 23 | 12 |
+| `ikea limited` | IKEA LIMITED (01986283) | active | succeeded | 1.2 s | 30 | director_churn (high) | financial_deterioration | 8 | 20 |
+| `temu payments` | TEMU PAYMENTS UK LIMITED (14476643) | active | succeeded | 0.6 s | 0 | none | financial_deterioration | 3 | 10 |
+| `wilko limited` | WILKO LIMITED (09563205) | active | succeeded | 0.9 s | 5 | psc_changes (low) | none | 19 | 12 |
+| `00365335` | WL REALISATIONS (2023) LIMITED (00365335) | liquidation | succeeded | 1.3 s | 100 | company_status (high) | overdue_accounts, overdue_confirmation_statement, financial_deterioration | 4 | 14 |
+
+The liquidated company is now a knockout (score 100, `company_status`); the other five are
+unchanged. All six succeeded, under 2 s each.
