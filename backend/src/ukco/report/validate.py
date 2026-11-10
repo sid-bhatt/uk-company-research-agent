@@ -105,6 +105,9 @@ def validate_report(report: RiskReport, store: EvidenceStore) -> list[str]:
         problems.extend(
             f"check {check.rule}: unknown flag {i}" for i in check.flag_ids if i not in flag_ids
         )
+        check_ids(f"check {check.rule}", check.evidence_ids)
+        if check.status == "noted" and not check.evidence_ids:
+            problems.append(f"check {check.rule}: a noted check must cite evidence")
 
     if report.narrative:
         problems.extend(narrative_problems(report))

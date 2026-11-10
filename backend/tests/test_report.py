@@ -374,3 +374,33 @@ async def test_openai_compatible_writer_raises_on_unusable_responses(
     client, _ = _oai_client(response)
     with pytest.raises(NarrativeError, match=re.escape(message)):
         await OpenAICompatibleNarrativeWriter(client).write(_empty_report())
+
+
+async def test_noted_check_cites_validated_evidence(engine: Engine) -> None:
+    ch = FakeCompaniesHouse()
+    newest, older = ch.accounts_document_ids(ACTIVE)[:2]
+    ch.documents[newest] = micro_accounts(
+        "2025-04-05",
+        "2024-04-05",
+        now={"NetAssetsLiabilities": 100},
+        before={"NetAssetsLiabilities": 100},
+    )
+    ch.documents[older] = None
+    report = await make_report(engine, ch)  # raises if validation fails
+    check = next(c for c in report.checks if c.rule == "financial_substance")
+    assert check.status == "noted" and len(check.evidence_ids) == 2
+    labels = {e.id: e.label for e in report.evidence}
+    assert all("net assets" in labels[i].lower() for i in check.evidence_ids)
+    assert not any(f.flag_type == "financial_substance" for f in report.flags)
+
+    broken = report.model_copy(
+        update={
+            "checks": [
+                c.model_copy(update={"evidence_ids": []}) if c is check else c
+                for c in report.checks
+            ]
+        }
+    )
+    assert "a noted check must cite evidence" in " ".join(
+        validate_report(broken, DbEvidenceStore(engine))
+    )

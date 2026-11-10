@@ -5,7 +5,7 @@ from decimal import Decimal
 from ukco.report.schema import RiskReport
 
 SEVERITY_ICON = {"high": "🔴", "medium": "🟠", "low": "🟡"}
-STATUS_ICON = {"flagged": "✗", "clear": "✓", "not_assessed": "·"}
+STATUS_ICON = {"flagged": "✗", "clear": "✓", "not_assessed": "·", "noted": "!"}
 
 
 def _money(value: str) -> str:

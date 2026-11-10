@@ -39,9 +39,13 @@ export const sampleReport: RiskReport = {
     },
   ],
   checks: [
-    { rule: "financial_deterioration", status: "flagged", note: null, flag_ids: ["F1"] },
-    { rule: "officer_network", status: "not_assessed", note: "No network data.", flag_ids: [] },
-    { rule: "overdue_accounts", status: "clear", note: "Next accounts due 2026-12-31.", flag_ids: [] },
+    { rule: "financial_deterioration", status: "flagged", note: null, flag_ids: ["F1"], evidence_ids: [] },
+    { rule: "officer_network", status: "not_assessed", note: "No network data.", flag_ids: [], evidence_ids: [] },
+    { rule: "overdue_accounts", status: "clear", note: "Next accounts due 2026-12-31.", flag_ids: [], evidence_ids: [] },
+    {
+      rule: "financial_substance", status: "noted", flag_ids: [], evidence_ids: ["E3"],
+      note: "Net assets were £100 at 2025-03-31. Minimal financial substance on file. Verify the business trades as the customer describes.",
+    },
   ],
   evidence: [
     { id: "E1", label: "Company profile", citation: { kind: "api", snapshot_id: 1, document_id: null, pointer: "", path: "/company/12345678", url: "https://find-and-update.company-information.service.gov.uk/company/12345678" } },

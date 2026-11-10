@@ -79,9 +79,11 @@ class CheckResult(BaseModel):
     """Every rule's outcome, so a reviewer sees what was checked, not just what fired."""
 
     rule: str
-    status: Literal["flagged", "clear", "not_assessed"]
+    # "noted": something to verify that isn't a risk signal (no points, no review needed).
+    status: Literal["flagged", "clear", "not_assessed", "noted"]
     note: str | None = None
     flag_ids: list[str] = []
+    evidence_ids: list[str] = []  # for "noted" checks
 
 
 class FlagExplanation(BaseModel):

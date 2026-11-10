@@ -211,6 +211,11 @@ export interface components {
          */
         CheckResult: {
             /**
+             * Evidence Ids
+             * @default []
+             */
+            evidence_ids: string[];
+            /**
              * Flag Ids
              * @default []
              */
@@ -223,7 +228,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "flagged" | "clear" | "not_assessed";
+            status: "flagged" | "clear" | "not_assessed" | "noted";
         };
         /** Citation */
         Citation: {

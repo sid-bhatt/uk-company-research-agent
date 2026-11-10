@@ -54,6 +54,14 @@
       "CheckResult": {
         "description": "Every rule's outcome, so a reviewer sees what was checked, not just what fired.",
         "properties": {
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
           "flag_ids": {
             "default": [],
             "items": {
@@ -81,7 +89,8 @@
             "enum": [
               "flagged",
               "clear",
-              "not_assessed"
+              "not_assessed",
+              "noted"
             ],
             "title": "Status",
             "type": "string"

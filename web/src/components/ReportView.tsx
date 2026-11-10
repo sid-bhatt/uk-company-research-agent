@@ -13,9 +13,10 @@ const STATUS_STYLE = {
   flagged: "text-red-700 dark:text-red-300",
   clear: "text-emerald-700 dark:text-emerald-300",
   not_assessed: "text-zinc-500 dark:text-zinc-400",
+  noted: "text-sky-700 dark:text-sky-300",
 } as const;
 
-const STATUS_LABEL = { flagged: "Flagged", clear: "Clear", not_assessed: "Not assessed" } as const;
+const STATUS_LABEL = { flagged: "Flagged", clear: "Clear", not_assessed: "Not assessed", noted: "To verify" } as const;
 
 export function SeverityBadge({ severity }: { severity: ReportFlag["severity"] }) {
   return (
@@ -155,6 +156,7 @@ export function ReportView({
     (a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity] || b.points - a.points,
   );
   const why = new Map(report.narrative?.flag_explanations.map((e) => [e.flag_id, e.text]) ?? []);
+  const notes = report.checks.filter((check) => check.status === "noted");
   const band = scoreBand(report.risk_score);
   const c = report.company;
 
@@ -207,6 +209,20 @@ export function ReportView({
           </div>
         )}
       </section>
+
+      {notes.length > 0 && (
+        <section aria-labelledby="notes-heading" className="rounded-lg p-4 ring-1 ring-sky-200 dark:ring-sky-900">
+          <h2 id="notes-heading" className="text-lg font-semibold">To verify</h2>
+          <p className="mt-1 text-sm text-zinc-500">Not red flags and not in the score: context worth checking with the customer.</p>
+          {notes.map((check) => (
+            <div key={check.rule} className="mt-3">
+              <h3 className="text-sm font-semibold">{RULE_LABELS[check.rule] ?? check.rule}</h3>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300">{check.note}</p>
+              <EvidenceLinks ids={check.evidence_ids} evidence={evidence} />
+            </div>
+          ))}
+        </section>
+      )}
 
       <section aria-labelledby="checks-heading">
         <h2 id="checks-heading" className="text-lg font-semibold">Every check</h2>

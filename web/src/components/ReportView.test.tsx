@@ -29,6 +29,16 @@ describe("ReportView", () => {
     expect(within(checks).getByText("No network data.")).toBeInTheDocument();
   });
 
+  it("shows noted checks as things to verify, with their evidence, apart from red flags", () => {
+    render(<ReportView report={sampleReport} />);
+    const notes = screen.getByRole("heading", { name: "To verify" }).parentElement!;
+    expect(within(notes).getByText(/Net assets were £100/)).toBeInTheDocument();
+    expect(within(notes).getByRole("link")).toHaveAttribute("href", "https://example.test/doc2");
+    expect(screen.getAllByRole("article")).toHaveLength(2); // still two red flags
+    const checks = screen.getByRole("heading", { name: "Every check" }).parentElement!;
+    expect(within(checks).getAllByText("To verify")).toHaveLength(1);
+  });
+
   it("renders filed figures as linked money values", () => {
     render(<ReportView report={sampleReport} />);
     expect(screen.getByRole("link", { name: "£44,235" })).toHaveAttribute("href", "https://example.test/doc1");

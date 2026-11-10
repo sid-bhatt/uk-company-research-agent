@@ -37,7 +37,7 @@ from ukco.report.schema import RiskReport
 from ukco.report.validate import DbEvidenceStore
 from ukco.risk import default_policy
 
-AGENT_VERSION = "chat-v2"  # v2: company_status rule added to get_check
+AGENT_VERSION = "chat-v3"  # v2: company_status rule; v3: financial_substance note
 BINDING_BETA = "thinking-binding-controls-2026-08-01"
 MAX_STEPS = 6  # model calls per question
 MAX_QUESTION_CHARS = 1000
@@ -72,6 +72,10 @@ RULE_DESCRIPTIONS = {
     "new_company_high_risk_sic": "Young company in a sector with higher financial-crime risk.",
     "officer_network": "Directors' other companies that were dissolved or became insolvent.",
     "financial_deterioration": "Falls in filed balance-sheet figures, and net liabilities.",
+    "financial_substance": (
+        "A note, not a flag (no points): tiny net assets or dormant accounts, so the analyst "
+        "should verify the business really trades."
+    ),
 }
 
 

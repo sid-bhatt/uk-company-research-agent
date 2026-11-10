@@ -4,7 +4,7 @@
 # The values are deliberately in config, not code: policy changes shouldn't need a
 # deploy, and every report records the hash of the policy that produced it.
 
-version: 2
+version: 3
 
 # Points per severity. Risk score = sum of points over flags, capped at 100; a knockout
 # flag (see company_status) sets it to 100 outright.
@@ -87,6 +87,14 @@ rules:
     drop_severity: medium
     net_liabilities_severity: medium   # liabilities exceed assets
     turned_negative_severity: high     # net assets went from positive to negative
+
+  financial_substance:
+    # A note, never a flag: tiny net assets (e.g. £100 of share capital) or dormant accounts
+    # are normal for dormant, holding and owner-managed companies, so this adds no points.
+    # It asks the reviewer to check the business really trades as the customer says.
+    # Becomes a scored rule only if the eval shows it predicts adverse outcomes.
+    max_net_assets: 1000     # net assets at or below this (and not negative) …
+    note_dormant: true       # … or the latest accounts were filed as dormant
 
 # Higher-risk sectors for financial crime, loosely following the UK National Risk
 # Assessment of money laundering. SIC 2007 codes.

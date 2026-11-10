@@ -34,6 +34,7 @@ export const RULE_LABELS: Record<string, string> = {
   new_company_high_risk_sic: "New company in a higher-risk sector",
   officer_network: "Directors' other companies",
   financial_deterioration: "Filed accounts",
+  financial_substance: "Financial substance",
 };
 
 export const METRIC_LABELS: Record<string, string> = {

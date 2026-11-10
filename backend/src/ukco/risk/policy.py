@@ -74,6 +74,11 @@ class FinancialRule(_Strict):
     turned_negative_severity: Severity
 
 
+class FinancialSubstanceRule(_Strict):
+    max_net_assets: float
+    note_dormant: bool
+
+
 class Rules(_Strict):
     company_status: CompanyStatusRule
     overdue_accounts: OverdueRule
@@ -84,6 +89,7 @@ class Rules(_Strict):
     new_company_high_risk_sic: NewCompanyRule
     officer_network: OfficerNetworkRule
     financial_deterioration: FinancialRule
+    financial_substance: FinancialSubstanceRule
 
 
 class Policy(_Strict):

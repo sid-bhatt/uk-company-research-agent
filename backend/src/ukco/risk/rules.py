@@ -626,9 +626,13 @@ def _money(value: Decimal) -> str:
     return f"-£{-value:,.0f}" if value < 0 else f"£{value:,.0f}"
 
 
-def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
-    rule = "financial_deterioration"
-    cfg = ctx.policy.rules.financial_deterioration
+Series = dict[str, dict[dt.date, tuple[FinancialFact, AccountsDocument]]]
+
+
+def _filed_figures(
+    ctx: RuleContext, rule: str
+) -> tuple[Series, list[AccountsDocument]] | RuleOutcome:
+    """metric → period end → (fact, document) from accounts filed by as_of, or why not."""
     filed = [d for d in ctx.bundle.accounts if d.filed_on <= ctx.as_of]
     usable = [d for d in filed if d.facts]
     if not usable:
@@ -641,17 +645,29 @@ def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
         return RuleOutcome(
             rule=rule, status="not_assessed", note=reason[0].upper() + reason[1:] + "."
         )
-
-    # metric → period end → (fact, document); a later filing wins for the same period
-    # (restated comparatives).
-    series: dict[str, dict[dt.date, tuple[FinancialFact, AccountsDocument]]] = {}
+    # A later filing wins for the same period (restated comparatives).
+    series: Series = {}
     for doc in sorted(usable, key=lambda d: d.filed_on):
         for fact in doc.facts:
             series.setdefault(fact.metric, {})[fact.period_end] = (fact, doc)
+    return series, usable
+
+
+def _cite_fact(ctx: RuleContext, entry: tuple[FinancialFact, AccountsDocument]) -> Citation:
+    fact, doc = entry
+    return Citation.for_document(ctx.n, doc.transaction_id, doc.document_id, fact.locator)
+
+
+def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
+    rule = "financial_deterioration"
+    cfg = ctx.policy.rules.financial_deterioration
+    figures_or_outcome = _filed_figures(ctx, rule)
+    if isinstance(figures_or_outcome, RuleOutcome):
+        return figures_or_outcome
+    series, usable = figures_or_outcome
 
     def cite(entry: tuple[FinancialFact, AccountsDocument]) -> Citation:
-        fact, doc = entry
-        return Citation.for_document(ctx.n, doc.transaction_id, doc.document_id, fact.locator)
+        return _cite_fact(ctx, entry)
 
     net_assets = series.get("net_assets", {})
     periods = sorted(net_assets)
@@ -727,6 +743,52 @@ def financial_deterioration(ctx: RuleContext) -> RuleOutcome:
     return RuleOutcome(rule=rule, status="clear", note=note + ".")
 
 
+def financial_substance(ctx: RuleContext) -> RuleOutcome:
+    """A note, not a flag: tiny net assets or dormant accounts, to verify the business trades."""
+    rule = "financial_substance"
+    cfg = ctx.policy.rules.financial_substance
+    figures_or_outcome = _filed_figures(ctx, rule)
+    if isinstance(figures_or_outcome, RuleOutcome):
+        return figures_or_outcome
+    series, _ = figures_or_outcome
+    net_assets = series.get("net_assets", {})
+    if not net_assets:
+        return RuleOutcome(
+            rule=rule, status="not_assessed", note="Filed accounts carry no net assets figure."
+        )
+    periods = sorted(net_assets)
+    latest, prior = periods[-1], (periods[-2] if len(periods) > 1 else None)
+    now = net_assets[latest][0].value
+    before = net_assets[prior][0].value if prior else None
+    if now < 0:
+        return RuleOutcome(
+            rule=rule,
+            status="clear",
+            note="Net liabilities, which the filed accounts check flags.",
+        )
+    small = now <= Decimal(str(cfg.max_net_assets))
+    dormant = cfg.note_dormant and net_assets[latest][1].is_dormant
+    if not (small or dormant):
+        return RuleOutcome(rule=rule, status="clear", note=f"Net assets {_money(now)} at {latest}.")
+
+    found = f"Net assets were {_money(now)} at {latest}"
+    if before is not None:
+        found += f", unchanged from {prior}" if before == now else f" ({_money(before)} at {prior})"
+    if dormant:
+        found += "; the accounts were filed as dormant"
+    return RuleOutcome(
+        rule=rule,
+        status="noted",
+        note=(
+            f"{found}. Minimal financial substance on file: common for dormant, holding and "
+            "owner-managed companies, so not a risk signal by itself. Verify the business "
+            "trades as the customer describes (e.g. bank statements, invoices)."
+        ),
+        evidence=[_cite_fact(ctx, net_assets[latest])]
+        + ([_cite_fact(ctx, net_assets[prior])] if prior else []),
+    )
+
+
 RULES: list[Callable[[RuleContext], RuleOutcome]] = [
     company_status,
     overdue_accounts,
@@ -737,4 +799,5 @@ RULES: list[Callable[[RuleContext], RuleOutcome]] = [
     new_company_high_risk_sic,
     officer_network,
     financial_deterioration,
+    financial_substance,
 ]

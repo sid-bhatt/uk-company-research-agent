@@ -21,9 +21,11 @@ class Flag(BaseModel):
 
 class RuleOutcome(BaseModel):
     rule: str
-    status: Literal["flagged", "clear", "not_assessed"]
+    # "noted": context for the reviewer to verify, not a risk signal (no flag, no points).
+    status: Literal["flagged", "clear", "not_assessed", "noted"]
     flags: list[Flag] = []
-    note: str | None = None  # why clear / why not assessed / caveats
+    note: str | None = None  # why clear / why not assessed / what to verify / caveats
+    evidence: list[Citation] = []  # what a "noted" outcome rests on
 
 
 class ScoreContribution(BaseModel):

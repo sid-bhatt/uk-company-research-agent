@@ -233,7 +233,11 @@ def build_report(
 
     checks = [
         CheckResult(
-            rule=o.rule, status=o.status, note=o.note, flag_ids=flag_ids_by_rule.get(o.rule, [])
+            rule=o.rule,
+            status=o.status,
+            note=o.note,
+            flag_ids=flag_ids_by_rule.get(o.rule, []),
+            evidence_ids=[reg.add(c) for c in o.evidence],
         )
         for o in assessment.outcomes
     ]

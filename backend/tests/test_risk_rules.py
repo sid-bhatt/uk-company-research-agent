@@ -48,16 +48,18 @@ async def run(ch: FakeCompaniesHouse, number: str, as_of: dt.date | None = None)
 def assert_citations_resolve(result: Assessment, bundle: CompanyBundle) -> None:
     bodies = {i + 1: r.body for i, r in enumerate(bundle.responses)}
     documents = {d.document_id: d for d in bundle.accounts}
-    for flag in result.flags:
-        for c in flag.evidence:
-            if c.kind == "api":
-                assert c.snapshot_id is not None
-                resolve_pointer(bodies[c.snapshot_id], c.pointer)  # raises if it doesn't resolve
-            else:
-                doc = documents[c.document_id or ""]
-                assert doc.content, "document citation without stored content"
-                locators = {f.locator for f in parse_ixbrl(doc.content).facts}
-                assert c.pointer in locators, f"{c.pointer} not in document {c.document_id}"
+    cited = [c for f in result.flags for c in f.evidence] + [
+        c for o in result.outcomes for c in o.evidence
+    ]
+    for c in cited:
+        if c.kind == "api":
+            assert c.snapshot_id is not None
+            resolve_pointer(bodies[c.snapshot_id], c.pointer)  # raises if it doesn't resolve
+        else:
+            doc = documents[c.document_id or ""]
+            assert doc.content, "document citation without stored content"
+            locators = {f.locator for f in parse_ixbrl(doc.content).facts}
+            assert c.pointer in locators, f"{c.pointer} not in document {c.document_id}"
 
 
 def outcome(result: Assessment, rule: str) -> RuleOutcome:
@@ -448,6 +450,83 @@ async def test_back_test_only_sees_accounts_filed_by_as_of() -> None:
     assert fin.status == "clear" and "£50,000 at 2024-04-05" in (fin.note or "")
 
 
+# --- Financial substance (a note, not a flag) ---------------------------------------------
+
+
+def accounts_type(ch: FakeCompaniesHouse, kind: str) -> None:
+    for item in edit(ch, f"/company/{ACTIVE}/filing-history")["items"]:
+        if item.get("category") == "accounts":
+            item["description"] = f"accounts-with-accounts-type-{kind}"
+
+
+async def test_minimal_net_assets_are_noted_without_points() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={"NetAssetsLiabilities": 100},
+            before={"NetAssetsLiabilities": 100},
+        ),
+    )
+    result = await run(ch, ACTIVE)
+    sub = outcome(result, "financial_substance")
+    assert sub.status == "noted" and not sub.flags
+    assert "£100 at 2025-04-05, unchanged from 2024-04-05" in (sub.note or "")
+    assert "Verify the business trades" in (sub.note or "")
+    assert [c.kind for c in sub.evidence] == ["document", "document"]  # both year-ends
+    assert not any(f.flag_type == "financial_substance" for f in result.flags)
+    assert result.risk_score == sum(c.points for c in result.contributions)  # adds nothing
+
+
+async def test_dormant_accounts_are_noted_whatever_the_figure() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={"NetAssetsLiabilities": 250_000},
+            before={"NetAssetsLiabilities": 250_000},
+        ),
+    )
+    accounts_type(ch, "dormant")  # as the fixture company really files
+    sub = outcome(await run(ch, ACTIVE), "financial_substance")
+    assert sub.status == "noted" and "filed as dormant" in (sub.note or "")
+
+
+@pytest.mark.parametrize(
+    ("net_assets", "status", "note"),
+    [
+        (50_000, "clear", "Net assets £50,000 at 2025-04-05."),
+        (-2_000, "clear", "Net liabilities"),  # the filed accounts check flags it instead
+        (1_000, "noted", "£1,000"),  # the threshold is inclusive
+    ],
+)
+async def test_substance_threshold(net_assets: int, status: str, note: str) -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(
+        ch,
+        micro_accounts(
+            "2025-04-05",
+            "2024-04-05",
+            now={"NetAssetsLiabilities": net_assets},
+            before={"NetAssetsLiabilities": 60_000},
+        ),
+    )
+    accounts_type(ch, "micro-entity")  # a trading company: only the figure matters
+    sub = outcome(await run(ch, ACTIVE), "financial_substance")
+    assert sub.status == status and note in (sub.note or "")
+
+
+async def test_substance_not_assessed_without_figures() -> None:
+    ch = FakeCompaniesHouse()
+    set_accounts(ch, None, None)
+    sub = outcome(await run(ch, ACTIVE), "financial_substance")
+    assert sub.status == "not_assessed" and "PDF-only" in (sub.note or "")
+
+
 # --- Engine and policy ----------------------------------------------------------------------
 
 
@@ -474,7 +553,7 @@ async def test_score_is_capped_at_100() -> None:
 
 def test_policy_is_strict_and_hashed(tmp_path) -> None:
     policy = default_policy()
-    assert len(policy.sha256) == 64 and policy.version == 2
+    assert len(policy.sha256) == 64 and policy.version == 3
     bad = tmp_path / "policy.yaml"
     bad.write_text(DEFAULT_POLICY.read_text() + "\nunexpected_key: 1\n")
     with pytest.raises(ValueError):

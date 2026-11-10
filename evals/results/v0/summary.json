@@ -1,7 +1,7 @@
 {
   "as_of": "2024-09-30",
   "window_months": 18,
-  "policy_sha256": "e34f48cc8e38c85e5dd36a28fc9a7663c0276559d694a0a219bdf0cfd1552bae",
+  "policy_sha256": "6aff51005b806fcf03a0d7817e68588a04fdde6f03e2122bd6752fe13c5c90f1",
   "companies": 60,
   "outcomes": {
     "compulsory_strike_off": 20,
@@ -79,6 +79,7 @@
   },
   "not_assessed_share": {
     "financial_deterioration": 0.2,
+    "financial_substance": 0.2,
     "officer_network": 1.0
   },
   "rule_fidelity": null
