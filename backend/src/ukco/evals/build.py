@@ -34,6 +34,17 @@ DEFAULT_QUOTAS: dict[Outcome, int] = {
 INCORPORATED_FROM, INCORPORATED_TO = dt.date(2020, 1, 1), dt.date(2023, 9, 30)
 
 
+def scaled_quotas(size: int) -> dict[Outcome, int]:
+    """DEFAULT_QUOTAS' proportions at another size (largest remainder, so they sum to size)."""
+    total = sum(DEFAULT_QUOTAS.values())
+    exact: dict[Outcome, float] = {o: size * n / total for o, n in DEFAULT_QUOTAS.items()}
+    quotas: dict[Outcome, int] = {o: int(x) for o, x in exact.items()}
+    by_remainder = sorted(exact, key=lambda o: exact[o] - quotas[o], reverse=True)
+    for o in by_remainder[: size - sum(quotas.values())]:
+        quotas[o] += 1
+    return quotas
+
+
 @dataclass
 class BuildStats:
     candidates: int = 0
@@ -75,7 +86,9 @@ async def build_eval_set(
     quotas: dict[Outcome, int] | None = None,
     seed: int = 7,
     max_candidates: int = 800,
+    exclude: frozenset[str] = frozenset(),
 ) -> tuple[list[FrozenCompany], BuildStats]:
+    """`exclude`: company numbers already in other eval sets, so the sets never overlap."""
     today = dt.date.today()
     if add_months(as_of, WINDOW_MONTHS) > today:
         raise ValueError("the outcome window hasn't finished yet: survivors can't be labelled")
@@ -83,7 +96,7 @@ async def build_eval_set(
     rng = random.Random(seed)
     sources = _sources(as_of)
     stats = BuildStats()
-    seen: set[str] = set()
+    seen: set[str] = set(exclude)
     kept: list[FrozenCompany] = []
 
     while any(remaining.values()) and stats.candidates < max_candidates:

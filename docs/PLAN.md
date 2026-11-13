@@ -40,7 +40,8 @@ Budget: ~3–4 h/day, 6 days/week, 7th day is buffer. Product decision: [ADR-004
 | 18 | Live smoke test on 6 real companies ([report](smoke-test-v1.md)): found and fixed a critical gap (a company in liquidation scored 0 → `company_status` knockout rule, policy v2). README v0: architecture diagram, trade-offs, smoke test, eval baseline. Fix verified live (smoke run 2). Screenshots + demo GIF still to add. **Ship.** | ◐ |
 
 ## Weeks 4–6: evals + observability + pipeline
-- **Beat the Day 10 baseline (AUC 0.68):** leading indicators (late-filing history, persistent net liabilities, no/dormant accounts in year 2), `RP05` move to the Companies House default address; director churn relative to board size (Greggs, a FTSE 250 board, is flagged for 4 changes in 12 months: normal rotation); human rule-fidelity labels.
+- ✅ **Held-out test set** `test-v1` (100 companies, logged access): current rules score **AUC 0.57** there (0.68 on the development set v0 was optimistic).
+- **Beat the held-out baseline (AUC 0.57 on test-v1), developing on v0 only:** leading indicators (late-filing history, persistent net liabilities, no/dormant accounts in year 2), `RP05` move to the Companies House default address; director churn relative to board size (Greggs, a FTSE 250 board, is flagged for 4 changes in 12 months: normal rotation); human rule-fidelity labels.
 - Eval set to ~100 companies; **evals on every PR** (frozen snapshot, no live API), results table posted as PR comment + README.
 - Financial-extraction accuracy vs hand-checked figures; PDF-only fallback (OCR balance-sheet pages + LLM extraction, [ADR-003](adr/0003-ocr-for-filing-documents.md)).
 - Langfuse dashboards: cost and latency per report.

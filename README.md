@@ -74,8 +74,9 @@ Data model: [docs/data-model.md](docs/data-model.md) · API rate budget:
   auditor, so the score never depends on a model. The LLM explains; it doesn't decide.
 - **Report jobs run inside the API process:** simple, and fine at demo volume; a queue and
   workers come before any real traffic.
-- **The risk score is a weak predictor so far** (AUC 0.68, below). It's measured honestly
-  against what actually happened to companies, and beating it is the next milestone.
+- **The risk score is a weak predictor so far.** On 100 held-out companies it ranks those that
+  went on to fail barely above chance (AUC 0.57, below). It's measured honestly against what
+  actually happened to companies, and beating it is the current milestone.
 
 ## Run locally
 
@@ -159,15 +160,19 @@ rule, with a regression test.
 ## Eval results
 
 Scored **as of 30 Sep 2024** using only what was known then; outcome = compulsory strike-off
-or insolvency in the next 18 months. 60 real companies, frozen snapshot, run on every PR.
+or insolvency in the next 18 months. Real companies, frozen snapshots, no live API calls.
+Two sets: **v0** (60 companies), which the rules were developed against and CI runs on every
+PR; and **test-v1** (100 different companies), held out: run rarely, every run logged.
 Method and caveats: [evals/README.md](evals/README.md).
 
-| Metric | AUC [95% CI] |
-|---|---|
-| Risk score vs adverse outcome | **0.68** [0.55, 0.79] |
-| …without filing-deadline flags | 0.61 [0.49, 0.72] |
-| …insolvency vs survived only | 0.63 [0.44, 0.81] |
+| Metric (current rules, policy v3) | v0, development (60) | **test-v1, held out (100)** |
+|---|---|---|
+| Risk score vs adverse outcome | 0.68 [0.55, 0.79] | **0.57** [0.47, 0.67] |
+| …without filing-deadline flags | 0.61 [0.49, 0.72] | **0.50** [0.41, 0.59] |
+| …insolvency vs survived only | 0.63 [0.44, 0.81] | 0.62 [0.48, 0.76] |
 
-Baseline takeaway: a weak but real signal. The v1 rules catch distress that is already
-visible (net liabilities, office churn) more than distress that is coming. That's the
-target for the next iteration, measured against this baseline.
+Takeaway: the development-set number was optimistic. On fresh companies the score is barely
+better than chance, and without the filing-deadline flags (which partly *cause* compulsory
+strike-off) it has no signal at all; `net_liabilities`, the strongest flag on v0, raises more
+false alarms than catches on test-v1. The v1 rules see distress that's already visible, not
+distress that's coming. New rules are developed on v0 and measured once on test-v1.

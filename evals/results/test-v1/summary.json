@@ -1,0 +1,86 @@
+{
+  "as_of": "2024-09-30",
+  "window_months": 18,
+  "policy_sha256": "6aff51005b806fcf03a0d7817e68588a04fdde6f03e2122bd6752fe13c5c90f1",
+  "companies": 100,
+  "outcomes": {
+    "compulsory_strike_off": 34,
+    "insolvency": 20,
+    "survived": 33,
+    "voluntary_closure": 13
+  },
+  "score_auc": {
+    "auc": 0.566,
+    "ci95": [
+      0.466,
+      0.666
+    ],
+    "n": 100,
+    "positives": 54
+  },
+  "score_auc_without_deadline_flags": {
+    "auc": 0.495,
+    "ci95": [
+      0.405,
+      0.588
+    ],
+    "n": 100,
+    "positives": 54
+  },
+  "score_auc_insolvency_vs_survived": {
+    "auc": 0.617,
+    "ci95": [
+      0.477,
+      0.759
+    ],
+    "n": 53,
+    "positives": 20
+  },
+  "mean_score": {
+    "adverse": 8.0,
+    "not_adverse": 6.8
+  },
+  "per_flag": {
+    "director_churn": {
+      "flagged": 2,
+      "recall": 0.018518518518518517,
+      "false_alarm_rate": 0.021739130434782608
+    },
+    "financial_deterioration": {
+      "flagged": 7,
+      "recall": 0.07407407407407407,
+      "false_alarm_rate": 0.06521739130434782
+    },
+    "net_liabilities": {
+      "flagged": 16,
+      "recall": 0.1111111111111111,
+      "false_alarm_rate": 0.21739130434782608
+    },
+    "office_changes": {
+      "flagged": 6,
+      "recall": 0.07407407407407407,
+      "false_alarm_rate": 0.043478260869565216
+    },
+    "overdue_accounts": {
+      "flagged": 7,
+      "recall": 0.09259259259259259,
+      "false_alarm_rate": 0.043478260869565216
+    },
+    "overdue_confirmation_statement": {
+      "flagged": 8,
+      "recall": 0.12962962962962962,
+      "false_alarm_rate": 0.021739130434782608
+    },
+    "psc_changes": {
+      "flagged": 4,
+      "recall": 0.07407407407407407,
+      "false_alarm_rate": 0.0
+    }
+  },
+  "not_assessed_share": {
+    "financial_deterioration": 0.23,
+    "financial_substance": 0.23,
+    "officer_network": 1.0
+  },
+  "rule_fidelity": null
+}

@@ -7,6 +7,7 @@ import pytest
 
 from tests.fakes import ACTIVE, TODAY, FakeCompaniesHouse
 from ukco.companies_house.models import CompanyProfile, FilingHistoryItem, Insolvency
+from ukco.evals.build import DEFAULT_QUOTAS, scaled_quotas
 from ukco.evals.frozen import FrozenCompany, read_snapshot, replay_bundle, write_snapshot
 from ukco.evals.labels import label_company
 from ukco.evals.metrics import auc, bootstrap_auc_ci
@@ -135,3 +136,47 @@ async def test_frozen_snapshot_replays_the_same_assessment(tmp_path: Path) -> No
     assert again.risk_score == original.risk_score
     text = "\n".join(str(r["body"]) for r in restored.responses)
     assert "PERSON 1" in text  # pseudonymised before writing
+
+
+# --- Eval sets: sizing and the held-out test set -------------------------------------------
+
+
+@pytest.mark.parametrize("size", [60, 100, 37, 1])
+def test_scaled_quotas_keep_proportions_and_size(size: int) -> None:
+    quotas = scaled_quotas(size)
+    assert sum(quotas.values()) == size
+    for outcome, n in DEFAULT_QUOTAS.items():
+        assert abs(quotas[outcome] - size * n / 60) < 1
+    assert scaled_quotas(60) == DEFAULT_QUOTAS
+
+
+def test_held_out_sets_need_a_reason_and_are_never_a_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from ukco import cli
+
+    monkeypatch.setattr(cli, "EVAL_DIR", tmp_path)
+    runner = CliRunner()
+    for args, message in [
+        (["eval", "run", "--name", "test-v9"], "--reason"),
+        (["eval", "run", "--name", "test-v9", "--reason", "x", "--update-baseline"], "never"),
+        (["eval", "run", "--name", "test-v9", "--reason", "x", "--check"], "never"),
+    ]:
+        result = runner.invoke(cli.app, args)
+        assert result.exit_code != 0 and message in result.output, args
+
+
+def test_frozen_sets_are_never_rebuilt_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from ukco import cli
+
+    monkeypatch.setattr(cli, "EVAL_DIR", tmp_path)
+    (tmp_path / "data" / "v0").mkdir(parents=True)
+    (tmp_path / "data" / "v0" / "snapshot.jsonl.gz").write_bytes(b"")
+    result = CliRunner().invoke(cli.app, ["eval", "build", "--name", "v0"])
+    assert result.exit_code != 0 and "frozen" in result.output

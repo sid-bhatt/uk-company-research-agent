@@ -1,8 +1,10 @@
 """Command-line entry point: `uv run ukco --help`."""
 
 import asyncio
+import datetime as dt
 import json
 import logging
+import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Annotated
@@ -423,24 +425,57 @@ def mcp() -> None:
     main()
 
 
+HELD_OUT_PREFIX = "test-"  # datasets named test-* are held out: see eval_run
+
+
+def _commit() -> str:
+    """The checked-out commit, marked if the tree has uncommitted changes."""
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD"], check=False).returncode != 0
+    except (OSError, subprocess.CalledProcessError):
+        return get_settings().git_sha
+    return sha + ("+changes" if dirty else "")
+
+
 @evals.command("build")
 def eval_build(
     name: Annotated[str, typer.Option(help="Dataset name under evals/data/.")] = "v0",
     seed: int = 7,
+    size: Annotated[int, typer.Option(help="Companies, in v0's outcome proportions.")] = 60,
+    exclude: Annotated[
+        list[str] | None, typer.Option(help="Datasets whose companies to leave out (repeat).")
+    ] = None,
+    max_candidates: int = 800,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Sample and label companies from the LIVE API into a frozen snapshot (run once)."""
-    from ukco.evals.build import build_eval_set
-    from ukco.evals.frozen import write_snapshot
+    from ukco.evals.build import build_eval_set, scaled_quotas
+    from ukco.evals.frozen import read_snapshot, write_snapshot
 
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(message)s")
+    path = EVAL_DIR / "data" / name / "snapshot.jsonl.gz"
+    if path.exists():
+        raise typer.BadParameter(f"{path} exists: eval sets are frozen, build a new name")
+    excluded = frozenset(
+        c.company_number
+        for other in exclude or []
+        for c in read_snapshot(EVAL_DIR / "data" / other / "snapshot.jsonl.gz")
+    )
 
     async def go():
         async with client_from_settings() as client:
-            return await build_eval_set(client, seed=seed)
+            return await build_eval_set(
+                client,
+                quotas=scaled_quotas(size),
+                seed=seed,
+                max_candidates=max_candidates,
+                exclude=excluded,
+            )
 
     companies, stats = asyncio.run(go())
-    path = EVAL_DIR / "data" / name / "snapshot.jsonl.gz"
     write_snapshot(path, companies)
     seconds = sorted(stats.seconds_per_company)
     typer.echo(f"kept {len(companies)} of {stats.candidates} candidates → {path}")
@@ -481,11 +516,25 @@ def eval_run(
         bool, typer.Option(help="Save this run as the new baseline.")
     ] = False,
     tolerance: float = 0.05,
+    reason: Annotated[
+        str | None,
+        typer.Option(help="Required for held-out test-* sets; logged with every run."),
+    ] = None,
 ) -> None:
-    """Replay the frozen snapshot offline, score as of the eval date, compare to outcomes."""
+    """Replay the frozen snapshot offline, score as of the eval date, compare to outcomes.
+
+    Held-out sets (`test-*`) measure the finished rules once, so they can't be tuned against:
+    a run needs a reason, which is logged (date, commit, policy) next to the results, and
+    they never become the CI baseline.
+    """
     from ukco.evals.run import evaluate, fidelity_score, summarise, to_markdown, write_results
 
     snapshot = EVAL_DIR / "data" / name / "snapshot.jsonl.gz"
+    held_out = name.startswith(HELD_OUT_PREFIX)
+    if held_out and (update_baseline or check):
+        raise typer.BadParameter("held-out sets are never a baseline or a CI gate")
+    if held_out and not (reason and reason.strip()):
+        raise typer.BadParameter(f"{name} is held out: say why you're running it (--reason)")
     baseline_path = EVAL_DIR / "baseline.json"
     baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
 
@@ -494,7 +543,22 @@ def eval_run(
     sheet = EVAL_DIR / "labels" / f"rule_fidelity_{name}.csv"
     summary["rule_fidelity"] = fidelity_score(sheet) if sheet.exists() else None
     write_results(EVAL_DIR / "results" / name, results, summary)
-    markdown = to_markdown(summary, baseline)
+    if held_out:
+        from ukco.risk import default_policy
+
+        log_path = EVAL_DIR / "results" / name / "access_log.md"
+        if not log_path.exists():
+            log_path.write_text(
+                f"# {name}: every run of this held-out set\n\n"
+                "| Date (UTC) | Commit | Policy | AUC | Reason |\n|---|---|---|---|---|\n"
+            )
+        with log_path.open("a") as f:
+            f.write(
+                f"| {dt.datetime.now(dt.UTC):%Y-%m-%d %H:%M} | {_commit()} | "
+                f"v{default_policy().version} | {summary['score_auc']['auc']} | "
+                f"{reason.strip() if reason else ''} |\n"
+            )
+    markdown = to_markdown(summary, None if held_out else baseline)  # other sets: not comparable
     typer.echo(markdown)
     if summary_md:
         with summary_md.open("a") as f:

@@ -27,7 +27,42 @@ no rate limit, no drift. People's names and addresses are pseudonymised (a fresh
 company), charge free-text is dropped, and accounts are stored as extracted figures rather than
 documents (filed accounts name the directors). A test scans the snapshot for personal data.
 
-### Results (baseline, policy v1)
+### Development and held-out sets
+
+| Set | Companies | Role |
+|---|---|---|
+| `v0` | 60 (seed 7) | **Development.** Rules are built and tuned against it; CI runs it on every PR (`--check` gates on AUC). Its numbers are optimistic by construction. |
+| `test-v1` | 100 (seed 11, built 2026-11-13, no overlap with v0), same population, quotas scaled: 34 compulsory strike-off, 20 insolvency, 13 voluntary closure, 33 survived | **Held out.** Measures finished rules. `ukco eval run --name test-v1` needs `--reason`, logs every run to [`results/test-v1/access_log.md`](results/test-v1/access_log.md), and is never a baseline or CI gate. |
+
+```bash
+uv run ukco eval build --name test-v1 --seed 11 --size 100 --exclude v0   # how it was built (once)
+uv run ukco eval run --name test-v1 --reason "…"                           # a logged, deliberate look
+```
+
+### Held-out baseline (policy v3, before any week-4 changes)
+
+| Metric | AUC [95% CI] | n |
+|---|---|---|
+| Risk score vs adverse outcome | **0.566** [0.466, 0.666] | 100 (54 adverse) |
+| …without filing-deadline flags | 0.495 [0.405, 0.588] | 100 |
+| …insolvency vs survived only | 0.617 [0.477, 0.759] | 53 (20 adverse) |
+
+| Flag | Flagged | Caught (of adverse) | False alarms (of the rest) |
+|---|---:|---:|---:|
+| overdue_confirmation_statement | 8 | 13% | 2% |
+| net_liabilities | 16 | 11% | 22% |
+| overdue_accounts | 7 | 9% | 4% |
+| financial_deterioration | 7 | 7% | 7% |
+| office_changes | 6 | 7% | 4% |
+| psc_changes | 4 | 7% | 0% |
+| director_churn | 2 | 2% | 2% |
+
+**What it says:** v0's 0.68 didn't generalise. On fresh companies the interval includes 0.5;
+without the filing-deadline flags there's no signal. `net_liabilities` reverses (more false
+alarms than catches), so it shouldn't carry the weight v0 suggested. This is the number week 4
+has to beat, on this set, measured once.
+
+### Results on v0 (development baseline, policy v1)
 
 | Metric | AUC [95% CI] | n |
 |---|---|---|
