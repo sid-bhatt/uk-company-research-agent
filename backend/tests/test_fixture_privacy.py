@@ -58,3 +58,20 @@ def test_eval_snapshots_have_no_personal_data(snapshot) -> None:
                     assert PSEUDONYM.match(value), f"unpseudonymised {where}"
                 elif key != "document_metadata":  # document ids can look like postcodes
                     assert not POSTCODE.search(value), f"postcode-like text at {where}"
+
+
+def test_free_text_in_filing_descriptions_is_dropped() -> None:
+    from ukco.privacy import Pseudonymiser
+
+    filing = {
+        "type": "PSC04",
+        "description": "change-to-a-person-with-significant-control",  # the slug: kept
+        "description_values": {
+            "description": "PSC's service address changed to 1 High Street, Leeds, LS1 1AA",
+            "change_date": "2024-09-30",
+            "psc_name": "Jane Example",
+        },
+    }
+    out = Pseudonymiser()(filing)
+    assert out["description"] == filing["description"]
+    assert out["description_values"] == {"change_date": "2024-09-30", "psc_name": "PERSON 1"}

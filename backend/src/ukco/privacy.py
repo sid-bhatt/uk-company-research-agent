@@ -16,6 +16,9 @@ DROP = {
     "particulars",
 }  # fmt: skip
 ADDRESS_TEXT = {"old_address", "new_address"}  # AD01 description_values
+# Free text inside a filing's description_values (e.g. "PSC's service address changed to
+# <full address>"); no rule reads it. The filing's own `description` slug is kept.
+DESCRIPTION_VALUES_FREE_TEXT = {"description"}
 
 
 def is_address_text(key: str) -> bool:
@@ -51,6 +54,9 @@ class Pseudonymiser:
                 out[k] = self.names.setdefault(v, f"PERSON {len(self.names) + 1}")
             elif is_address_text(k) and isinstance(v, str):
                 out[k] = self._address(v)
+            elif k == "description_values" and isinstance(v, dict):
+                kept = {dk: dv for dk, dv in v.items() if dk not in DESCRIPTION_VALUES_FREE_TEXT}
+                out[k] = self(kept)
             elif k == "registered_office_address" and isinstance(v, dict):
                 # Small companies often register at a director's home address.
                 full = json.dumps(v, sort_keys=True)

@@ -558,14 +558,18 @@ def eval_run(
                 f"v{default_policy().version} | {summary['score_auc']['auc']} | "
                 f"{reason.strip() if reason else ''} |\n"
             )
-    markdown = to_markdown(summary, None if held_out else baseline)  # other sets: not comparable
+    # A baseline is only comparable on the dataset it was recorded on.
+    same_set = baseline is not None and baseline.get("dataset", "v0") == name
+    markdown = to_markdown(summary, baseline if same_set else None)
     typer.echo(markdown)
     if summary_md:
         with summary_md.open("a") as f:
             f.write(markdown)
     if update_baseline:
-        baseline_path.write_text(json.dumps(summary, indent=2) + "\n")
+        baseline_path.write_text(json.dumps({"dataset": name, **summary}, indent=2) + "\n")
         typer.secho(f"baseline updated → {baseline_path}", fg="green")
+    if check and baseline and not same_set:
+        raise typer.BadParameter(f"the baseline is for {baseline.get('dataset', 'v0')}, not {name}")
     if check and baseline:
         now, before = summary["score_auc"]["auc"], baseline["score_auc"]["auc"]
         if now is None or now < before - tolerance:

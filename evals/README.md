@@ -21,23 +21,48 @@ Labels come from each company's own register records and cite them (filing trans
 insolvency case). Sampling: random 3-day incorporation windows across three search sources;
 every candidate is labelled, and kept only if eligible and its outcome's quota is open.
 
-**Frozen snapshot.** `data/v0/snapshot.jsonl.gz` holds every API response the eval needs,
+**Frozen snapshots.** `data/<set>/snapshot.jsonl.gz` holds every API response the eval needs,
 recorded once. CI replays it offline through the real client, parsers and rules: no API calls,
 no rate limit, no drift. People's names and addresses are pseudonymised (a fresh mapping per
-company), charge free-text is dropped, and accounts are stored as extracted figures rather than
+company), charge and filing free-text is dropped, and accounts are stored as extracted figures rather than
 documents (filed accounts name the directors). A test scans the snapshot for personal data.
 
 ### Development and held-out sets
 
 | Set | Companies | Role |
 |---|---|---|
-| `v0` | 60 (seed 7) | **Development.** Rules are built and tuned against it; CI runs it on every PR (`--check` gates on AUC). Its numbers are optimistic by construction. |
+| `dev-v1` | 400 (seed 23, built 2026-11-14, no overlap with the others): 134 compulsory strike-off, 80 insolvency, 53 voluntary closure, 133 survived | **Development.** New rules and weights are built against it: big enough that a real signal stands out from noise (AUC intervals about ±0.05, against ±0.12 on v0). |
+| `v0` | 60 (seed 7) | **Original set, now a regression check.** CI runs it on every PR (`--check` gates on AUC). The v1 rules were shaped while looking at it, so its numbers are optimistic. |
 | `test-v1` | 100 (seed 11, built 2026-11-13, no overlap with v0), same population, quotas scaled: 34 compulsory strike-off, 20 insolvency, 13 voluntary closure, 33 survived | **Held out.** Measures finished rules. `ukco eval run --name test-v1` needs `--reason`, logs every run to [`results/test-v1/access_log.md`](results/test-v1/access_log.md), and is never a baseline or CI gate. |
 
 ```bash
 uv run ukco eval build --name test-v1 --seed 11 --size 100 --exclude v0   # how it was built (once)
 uv run ukco eval run --name test-v1 --reason "…"                           # a logged, deliberate look
 ```
+
+### Current rules on the development set (policy v3)
+
+| Metric | AUC [95% CI] | n |
+|---|---|---|
+| Risk score vs adverse outcome | **0.587** [0.536, 0.636] | 400 (214 adverse) |
+| …without filing-deadline flags | 0.529 [0.481, 0.577] | 400 |
+| …insolvency vs survived only | 0.612 [0.536, 0.688] | 213 (80 adverse) |
+
+| Flag | Flagged | Caught (of adverse) | False alarms (of the rest) |
+|---|---:|---:|---:|
+| net_liabilities | 72 | 18% | 18% |
+| psc_changes | 41 | 14% | 6% |
+| overdue_confirmation_statement | 23 | 11% | 0% |
+| office_changes | 34 | 9% | 8% |
+| overdue_accounts | 20 | 9% | 1% |
+| financial_deterioration | 31 | 8% | 8% |
+| director_churn | 11 | 5% | 1% |
+
+It agrees with the held-out set (0.566), so **v0's 0.68 was the outlier**. The points are
+mis-set: `net_liabilities` (15 points) flags failed and healthy companies at the same rate,
+while the overdue flags, the most precise, carry the fewest points. Several signals that
+looked strong on v0 (filings per year: 0.69) shrink on 400 companies (0.58): with 60
+companies, after trying many ideas, noise looks like signal.
 
 ### Held-out baseline (policy v3, before any week-4 changes)
 
