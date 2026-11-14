@@ -326,6 +326,9 @@ def test_corrupt_cache_entry_is_a_miss(tmp_path: Path) -> None:
     assert cache.get_json(key, ttl=None) is None
 
 
+DOC_ID = "_CoOaKMy2YSbYCuKnKqbwrV3cZVJK5xnwl6fSECy0o0"
+
+
 # --- Document download -------------------------------------------------------------
 
 
@@ -348,6 +351,40 @@ async def test_document_download_follows_redirect_without_credentials(tmp_path: 
     assert content == again == b"%PDF-1.7 fake"
     assert len(seen) == 2  # second call served from cache
     assert "authorization" not in seen[1].headers  # API key never sent to S3
+
+
+@pytest.mark.parametrize(
+    ("failures", "outcome"),
+    [
+        ([httpx.ReadTimeout("slow")], "ok"),  # one timeout, then it works
+        ([httpx.Response(503)], "ok"),
+        ([httpx.ReadTimeout("slow")] * 3, "Network error downloading"),
+        ([httpx.Response(403)], "HTTP 403 downloading"),  # e.g. the signed URL expired
+    ],
+    ids=["timeout-then-ok", "503-then-ok", "timeouts-exhausted", "forbidden"],
+)
+async def test_document_download_retries_and_fails_cleanly(failures, outcome: str) -> None:
+    """A slow or failing storage download is retried, then reported as a CompaniesHouseError
+    (one unreadable document), never as a raw network exception that crashes a report."""
+    s3_url = "https://s3.eu-west-2.amazonaws.com/bucket/doc.xhtml?X-Amz-Signature=abc"
+    queue = list(failures)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "document-api.company-information.service.gov.uk":
+            return httpx.Response(302, headers={"Location": s3_url})
+        if queue:
+            failure = queue.pop(0)
+            if isinstance(failure, Exception):
+                raise failure
+            return failure
+        return httpx.Response(200, content=b"<html/>")
+
+    async with make_client(handler) as client:
+        if outcome == "ok":
+            assert await client.get_document_content(DOC_ID) == b"<html/>"
+        else:
+            with pytest.raises(CompaniesHouseError, match=outcome):
+                await client.get_document_content(DOC_ID)
 
 
 async def test_document_id_is_validated() -> None:

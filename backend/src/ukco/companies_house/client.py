@@ -357,9 +357,7 @@ class CompaniesHouseClient:
             location = response.headers.get("location", "")
             if urlparse(location).scheme != "https":
                 raise CompaniesHouseError(f"Unexpected document redirect for {doc_id}")
-            download = await self._downloads.get(location)
-            download.raise_for_status()
-            content = download.content
+            content = await self._download(location, doc_id)
         else:
             content = response.content
 
@@ -368,6 +366,28 @@ class CompaniesHouseClient:
         return content
 
     # --- Internals ------------------------------------------------------------
+
+    async def _download(self, url: str, doc_id: str) -> bytes:
+        """Fetch a document from its signed storage URL (no API key), retrying network
+        errors and 5xx like API calls. The URL is valid for about a minute, which the
+        short backoff stays within. Failures surface as CompaniesHouseError, so callers
+        treat one unreadable document as that, not as a crash."""
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = await self._downloads.get(url)
+            except httpx.TransportError as exc:
+                if attempt >= self._retry.max_attempts:
+                    raise CompaniesHouseError(f"Network error downloading {doc_id}: {exc}") from exc
+                await self._sleep(self._retry.backoff(attempt))
+                continue
+            if response.status_code >= 500 and attempt < self._retry.max_attempts:
+                await self._sleep(self._retry.backoff(attempt))
+                continue
+            if response.status_code != 200:
+                raise CompaniesHouseError(f"HTTP {response.status_code} downloading {doc_id}")
+            return response.content
 
     async def _get_json(
         self, url: str, params: Mapping[str, Any] | None = None, *, ttl: float | None
