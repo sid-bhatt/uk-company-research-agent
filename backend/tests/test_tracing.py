@@ -63,7 +63,7 @@ async def test_one_trace_per_report_with_a_span_per_stage(
     )
     assert root.attributes is not None
     assert (
-        root.attributes["kyb.risk_score"] == 15
+        root.attributes["kyb.risk_score"] == 14
         and root.attributes["langfuse.user.id"] == "analyst@example.com"
     )
 

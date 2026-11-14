@@ -58,9 +58,10 @@ async def test_risk_report_is_returned_and_stored_for_review(
 ) -> None:
     report = await call(server, "get_risk_report", company_number=ACTIVE)
 
-    assert report["risk_score"] == 15
-    (flag,) = report["flags"]
-    assert flag["id"] == "F1" and flag["evidence"][0]["url"].startswith("https://")
+    assert report["risk_score"] == 14
+    assert [f["id"] for f in report["flags"]] == ["F1", "F2"]
+    flag = report["flags"][0]
+    assert flag["evidence"][0]["url"].startswith("https://")
     assert {c["rule"] for c in report["checks"]} >= {"overdue_accounts", "financial_deterioration"}
     row = store.get_report(engine, report["report_id"])
     assert row and row["status"] == "succeeded" and row["requested_by"] == "mcp:test"
@@ -68,7 +69,7 @@ async def test_risk_report_is_returned_and_stored_for_review(
 
 async def test_flag_evidence_includes_the_cited_values(server: MCPServer) -> None:
     report = await call(server, "get_risk_report", company_number=ACTIVE)
-    evidence = await call(server, "get_flag_evidence", report_id=report["report_id"], flag_id="F1")
+    evidence = await call(server, "get_flag_evidence", report_id=report["report_id"], flag_id="F2")
 
     assert evidence["flag"]["title"] == "Financial deterioration"
     values = [e["value"] for e in evidence["evidence"]]

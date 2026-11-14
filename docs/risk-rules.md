@@ -1,4 +1,4 @@
-# KYB risk rules (policy v3)
+# KYB risk rules (policy v4)
 
 Deterministic rules over Companies House register data (`backend/src/ukco/risk/rules.py`),
 thresholds in [`risk_policy.yaml`](../backend/src/ukco/risk/risk_policy.yaml) (illustrative).
@@ -16,7 +16,8 @@ that are only known "as of now" report *not assessed* instead of leaking the fut
 | **Company status** *(knockout)* | Profile `company_status`; insolvency/closure filings (`LIQ*`, `AM*`, `COCOMP`, `GAZ2`, old `4.`/`2.` forms); strike-off filings (`DS01`, `GAZ1`) | Register status: liquidation, administration, receivership, voluntary arrangement, dissolved or closed → **knockout (score 100)**; "proposal to strike off" → high | Same, from dated filings only | Added after the v1 smoke test: a company in liquidation scored 0, because the deadline rules correctly stand down for it and nothing else looked at its status. A strike-off withdrawn by a later `DS02` doesn't count |
 | **Overdue accounts** | Profile `accounts`; `AA` filings' made-up dates | Register's `next_due` / `overdue` | Computed deadline (9 months private, 6 plc; first accounts 21/18 months) | Not modelled: ARD changes, extensions. Computed deadlines are tested against the register's (exact for the small-company fixture, ±7 days for Greggs' 52-week year) |
 | **Overdue confirmation statement** | Profile `confirmation_statement`; `CS01`/`AR01` | Register | Computed (12 months + 14 days) | |
-| **Director churn** | Company officer list (appointed/resigned dates) | ✓ | ✓ | Ignores the initial board (first 30 days) and same-day resign + re-appoint (role changes) |
+| **Filing history** *(v4)* | `AA`, `CS01`/`AR01` filings: filing date vs the deadline from each filing's own made-up date | ✓ | ✓ | Late filings in the last 24 months: 1 → low, 2–3 → medium, 4+ → high. Catches a *habit* of late filing that the overdue rules miss once the filing finally arrives. Accounts due 9 months after the period (plc 6); first accounts over 12 months due 21 (18) months after incorporation or 3 months after the period, whichever is later (s.442). Deadline extensions aren't modelled |
+| **Director churn** | Company officer list (appointed/resigned dates) | ✓ | ✓ | 24 months: 1–2 changes → low, 3–4 → medium, 5+ → high (v3: 12 months, from 3). Ignores the initial board (first 30 days) and same-day resign + re-appoint (role changes) |
 | **PSC changes** | PSC register and statements | ✓ | ✓ | Listed companies are exempt from the PSC register |
 | **Office changes** | `AD01` filings' change dates | ✓ + disputed / undeliverable markers | ✓ (markers not used: undated) | |
 | **New company, higher-risk SIC** | Incorporation date, SIC codes | ✓ | ✓ | SIC codes are current, not historical |
@@ -39,6 +40,27 @@ Net assets equal total equity in every filing (sign/scale parsing correct). Some
 creditors as *negative* (debit balances), so "net current assets ≤ current assets" does not hold for
 real data; the parser reproduces the filing as filed, and figures reconcile within each filing.
 
-**Score** = sum of flag points (low 5 / medium 15 / high 30), capped at 100. Every point is
-traceable to a flag. The score is a triage aid, not a probability; its predictive validity is
-what the Day 10 evals measure.
+**Score** = sum of flag points, capped at 100. A flag's points are its severity's points (low 5 /
+medium 15 / high 30) times its rule's **score weight**, rounded. Every point is traceable to a
+flag. The score is a triage aid, not a probability.
+
+**Score weights (v4)** were fitted on the development set `dev-v1` only: a logistic regression
+of "failed within 18 months" on each flag type's points, then rounded. The held-out set
+`test-v1` played no part. Unlisted rules keep weight 1.
+
+| Rule | Weight | Medium flag scores |
+|---|---|---|
+| Overdue confirmation statement | 2.2 | 33 |
+| Overdue accounts | 1.6 | 24 |
+| PSC changes | 1.1 | 16 |
+| Filing history | 0.7 | 10 |
+| Director churn | 0.4 | 6 |
+| Office changes, net liabilities, financial deterioration | 0.3 (floor) | 4–5 |
+| Company status, officer network, new company + higher-risk SIC, registered-office markers | 1 | 15 |
+
+The three "floor" rules showed no link to failure in the eval data. They stay in the report in
+full and still score lightly, because they bear on fraud and money-laundering risk, which a
+failure label doesn't measure. Rules with weight 1 can't be measured by the back-test: they're
+live-only, or no eval company was young enough to trigger them.
+
+Results: [evals/README.md](../evals/README.md).

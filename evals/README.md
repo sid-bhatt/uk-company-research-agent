@@ -40,7 +40,39 @@ uv run ukco eval build --name test-v1 --seed 11 --size 100 --exclude v0   # how 
 uv run ukco eval run --name test-v1 --reason "…"                           # a logged, deliberate look
 ```
 
-### Current rules on the development set (policy v3)
+### Policy v4 (week 4): what changed and how it was measured
+
+Built on `dev-v1` only, then measured **once** on `test-v1` (logged).
+
+1. **New rule `filing_history`:** accounts or confirmation statements filed *late* in the last
+   24 months. v3 only flagged filings overdue today, so a company that files every year but
+   months late looked clean.
+2. **Director churn over 24 months, from 1 change** (v3: 12 months, from 3).
+3. **Score weights per rule,** from a logistic regression of the outcome on each flag type's
+   points (repeated 5-fold cross-validation on dev-v1, so each company is scored by a model
+   that didn't see it), rounded. Office changes, net liabilities and financial deterioration
+   showed no link to failure and keep a 0.3 floor (see [risk-rules.md](../docs/risk-rules.md)).
+
+Choices tried on dev-v1 (cross-validated AUC): filing-history window 12/24/36 months/ever:
+0.59/**0.66**/0.65/0.64; a 7-day grace period cost 0.03 (filings a few days late are still
+late); director churn 12/24/36/60 months: 0.66/**0.67**/0.67/0.69. 24 months was picked over 60:
+every dev-v1 company is 3–4 years old, so "60 months" means "whole life" here, and the gain
+is within noise. Building the rule also caught a bug in the exploration: first accounts
+covering more than 12 months are due 21 months after incorporation (s.442), not 9 months
+after the period ends.
+
+| Set | v3 | **v4** | Note |
+|---|---|---|---|
+| dev-v1 (400) | 0.587 | **0.687** [0.637, 0.736] | weights fitted here; cross-validated estimate ≈0.67 |
+| test-v1 (100, held out) | 0.566 | **0.660** [0.549, 0.761] | one logged run; without deadline flags 0.495 → 0.600 |
+| v0 (60) | 0.681 | 0.673 [0.538, 0.804] | flat; v0 is the noisiest set, now the CI baseline |
+
+`filing_history` is the broadest flag (55 of 100 held-out companies: catches 61% of failures,
+false alarm on 48% of the rest), so it scores low on its own (10 points at medium) and
+matters most in combination. The `+changes` on the v4 access-log line is an untracked
+scratch file in the working tree, not code: the run used commit `ed4240b` as committed.
+
+### Policy v3 on the development set (before week 4)
 
 | Metric | AUC [95% CI] | n |
 |---|---|---|
@@ -64,7 +96,7 @@ while the overdue flags, the most precise, carry the fewest points. Several sign
 looked strong on v0 (filings per year: 0.69) shrink on 400 companies (0.58): with 60
 companies, after trying many ideas, noise looks like signal.
 
-### Held-out baseline (policy v3, before any week-4 changes)
+### Held-out baseline (policy v3, before week 4)
 
 | Metric | AUC [95% CI] | n |
 |---|---|---|

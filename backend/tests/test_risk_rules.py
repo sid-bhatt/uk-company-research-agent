@@ -121,11 +121,18 @@ def test_computed_deadlines_match_the_register() -> None:
 # --- Whole-company outcomes ---------------------------------------------------------------
 
 
-async def test_healthy_small_company_scores_zero_live() -> None:
+def points(flag_type: str, severity: str) -> int:
+    policy = default_policy()
+    return round(policy.points[severity] * policy.score_weights.get(flag_type, 1.0))  # type: ignore[index]
+
+
+async def test_small_company_live_is_flagged_only_for_its_late_filings() -> None:
     result = await run(FakeCompaniesHouse(), ACTIVE)
 
     assert result.live and result.as_of == FETCHED.date()
-    assert result.risk_score == 0 and result.flags == []
+    # Its two most recent confirmation statements were filed late (see filing_history test).
+    assert [f.flag_type for f in result.flags] == ["filing_history"]
+    assert result.risk_score == points("filing_history", "medium")
     statuses = {o.rule: o.status for o in result.outcomes}
     assert statuses["overdue_accounts"] == "clear"
     assert statuses["financial_deterioration"] == "not_assessed"
@@ -172,7 +179,8 @@ async def test_live_overdue_uses_the_register_and_cites_it() -> None:
     assert flag.details["method"] == "register"
     assert flag.severity == "high"  # 150 days
     assert flag.evidence[0].pointer == "/accounts"
-    assert result.risk_score == default_policy().points["high"]
+    assert flag.points == points("overdue_accounts", "high")
+    assert result.risk_score == sum(f.points for f in result.flags)
 
 
 async def test_companies_in_liquidation_are_not_assessed_for_filing_deadlines() -> None:
@@ -402,7 +410,10 @@ async def test_net_assets_turning_negative_is_high() -> None:
     assert flags["net_liabilities"].severity == "high"
     assert flags["net_liabilities"].title == "Net assets turned negative"
     assert "-£12,000" in flags["net_liabilities"].explanation
-    assert result.risk_score == 30 + 15  # plus the drop itself
+    assert flags["financial_deterioration"].severity == "medium"  # the drop itself
+    assert result.risk_score == points("net_liabilities", "high") + points(
+        "financial_deterioration", "medium"
+    ) + points("filing_history", "medium")
 
 
 async def test_small_base_swings_are_ignored() -> None:
@@ -553,7 +564,7 @@ async def test_score_is_capped_at_100() -> None:
 
 def test_policy_is_strict_and_hashed(tmp_path) -> None:
     policy = default_policy()
-    assert len(policy.sha256) == 64 and policy.version == 3
+    assert len(policy.sha256) == 64 and policy.version == 4
     bad = tmp_path / "policy.yaml"
     bad.write_text(DEFAULT_POLICY.read_text() + "\nunexpected_key: 1\n")
     with pytest.raises(ValueError):
@@ -617,3 +628,74 @@ async def test_strike_off_is_flagged_unless_withdrawn() -> None:
 async def test_an_active_company_is_clear() -> None:
     result = await run(FakeCompaniesHouse(), ACTIVE)
     assert outcome(result, "company_status").status == "clear"
+
+
+async def test_late_filings_in_the_window_are_flagged_and_cited() -> None:
+    result = await run(FakeCompaniesHouse(), ACTIVE)
+
+    history = outcome(result, "filing_history")
+    (flag,) = history.flags
+    assert flag.severity == "medium"  # two late filings in the 24 months to 2026-09-28
+    assert flag.details["events"] == [
+        {
+            "kind": "confirmation statement",
+            "made_up_to": "2025-03-01",
+            "due": "2025-03-15",
+            "filed": "2025-09-27",
+            "days_late": 196,
+        },
+        {
+            "kind": "confirmation statement",
+            "made_up_to": "2026-03-01",
+            "due": "2026-03-15",
+            "filed": "2026-04-02",
+            "days_late": 18,
+        },
+    ]
+    # The two filings themselves, oldest first (the register lists newest first).
+    assert [c.pointer for c in flag.evidence[:2]] == ["/items/1", "/items/0"]
+    assert "196 days late" in flag.explanation
+
+
+def set_first_accounts(ch: FakeCompaniesHouse, made_up: str, filed: str) -> None:
+    history = edit(ch, f"/company/{ACTIVE}/filing-history")
+    first = next(
+        f
+        for f in history["items"]
+        if f["type"] == "AA" and f["description_values"]["made_up_date"] == "2022-03-31"
+    )
+    first["description_values"]["made_up_date"], first["date"] = made_up, filed
+
+
+@pytest.mark.parametrize(
+    ("made_up", "filed", "late_due"),
+    [
+        # 13-month first period: due 21 months after incorporation (2021-03-02), not 9
+        # months after the period ends (2022-12-31).
+        ("2022-03-31", "2022-12-20", "2022-12-02"),
+        ("2022-03-31", "2022-11-30", None),
+        # 10-month first period: the usual 9 months after the period ends.
+        ("2021-12-31", "2022-11-20", "2022-09-30"),
+    ],
+)
+async def test_first_accounts_deadline(made_up: str, filed: str, late_due: str | None) -> None:
+    ch = FakeCompaniesHouse()
+    set_first_accounts(ch, made_up, filed)
+
+    result = await run(ch, ACTIVE, as_of=dt.date(2023, 6, 1))
+    events = [e for f in outcome(result, "filing_history").flags for e in f.details["events"]]
+    late_accounts = [e["due"] for e in events if e["kind"] == "accounts"]
+    assert late_accounts == ([late_due] if late_due else [])
+
+
+async def test_score_weights_scale_each_flag_types_points() -> None:
+    ch = FakeCompaniesHouse()
+    policy = default_policy()
+    heavier = policy.model_copy(update={"score_weights": {"filing_history": 2.0}})
+    bundle, evidence = await build(ch, ACTIVE)
+
+    (flag,) = outcome(assess(bundle, evidence, policy=heavier), "filing_history").flags
+    assert flag.points == 2 * policy.points["medium"]
+    unweighted = policy.model_copy(update={"score_weights": {}})
+    (flag,) = outcome(assess(bundle, evidence, policy=unweighted), "filing_history").flags
+    assert flag.points == policy.points["medium"]

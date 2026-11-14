@@ -4,7 +4,7 @@
 # The values are deliberately in config, not code: policy changes shouldn't need a
 # deploy, and every report records the hash of the policy that produced it.
 
-version: 3
+version: 4
 
 # Points per severity. Risk score = sum of points over flags, capped at 100; a knockout
 # flag (see company_status) sets it to 100 outright.
@@ -12,6 +12,27 @@ points:
   low: 5
   medium: 15
   high: 30
+
+# Per flag type: points = severity points x weight (rounded); unlisted types weigh 1.
+# Fitted on the development set dev-v1 only (400 companies; logistic regression on the
+# flags, repeated 5-fold cross-validation AUC 0.67 vs 0.59 for v3), then rounded. The
+# held-out test set played no part. evals/README.md has the method and the numbers.
+#
+# Rules the outcome label can't measure keep weight 1: officer_network, the live register
+# markers and new_company_high_risk_sic (back-tests can't see them, or no eval company was
+# young enough to trigger them). Office changes, net liabilities and financial
+# deterioration showed no link to failure within 18 months, but they bear on fraud and
+# money-laundering risk that the label doesn't measure, so they keep a floor of 0.3
+# (still shown in full, scored lightly).
+score_weights:
+  overdue_confirmation_statement: 2.2
+  overdue_accounts: 1.6
+  psc_changes: 1.1
+  filing_history: 0.7
+  director_churn: 0.4
+  office_changes: 0.3
+  net_liabilities: 0.3
+  financial_deterioration: 0.3
 
 rules:
   company_status:
@@ -37,12 +58,27 @@ rules:
       - {min_days: 1, severity: low}
       - {min_days: 60, severity: medium}
 
+  filing_history:
+    # Accounts or confirmation statements filed after their deadline, not just overdue today.
+    # A habit of filing late was the strongest signal missing from v3 (dev-v1 analysis).
+    # 24 months beat 36 and "ever" on dev-v1; a 7-day grace period lost signal (filings a
+    # few days late are still late, and Companies House fines them).
+    window_months: 24
+    grace_days: 0
+    severity_by_late_filings:
+      - {min_late: 1, severity: low}
+      - {min_late: 2, severity: medium}
+      - {min_late: 4, severity: high}
+
   director_churn:
-    window_months: 12
+    # v4: 24 months from 1 change (v3: 12 months from 3). Any change in the board is
+    # worth a reviewer's look; the low weight above keeps a single change cheap.
+    window_months: 24
     # Director appointments + resignations in the window, excluding the initial board
     # set up within `ignore_days_after_incorporation` of incorporation.
     ignore_days_after_incorporation: 30
     severity_by_changes:
+      - {min_changes: 1, severity: low}
       - {min_changes: 3, severity: medium}
       - {min_changes: 5, severity: high}
 

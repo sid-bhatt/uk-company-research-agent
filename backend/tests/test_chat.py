@@ -107,11 +107,11 @@ async def collect(events: AsyncIterator[ChatEvent]) -> list[ChatEvent]:
     return [e async for e in events]
 
 
-EXPLAIN_F1 = (
+EXPLAIN_F2 = (
     [
         thinking(),
         say("Let me check the filed accounts."),
-        call("get_flag_evidence", {"flag_id": "F1"}),
+        call("get_flag_evidence", {"flag_id": "F2"}),
     ],
     "tool_use",
 )
@@ -119,25 +119,25 @@ EXPLAIN_F1 = (
 
 async def test_tool_loop_answers_with_verified_citations(engine: Engine, report) -> None:
     rid, r = report
-    evidence_id = r.flags[0].evidence_ids[0]
+    evidence_id = r.flags[1].evidence_ids[0]
     claude = ScriptedClaude(
-        EXPLAIN_F1,
+        EXPLAIN_F2,
         (
-            [say(f"Net assets fell to £8,000 [{evidence_id}], see [F1]. Also [E999].")],
+            [say(f"Net assets fell to £8,000 [{evidence_id}], see [F2]. Also [E999].")],
             "end_turn",
         ),
     )
     agent = ClaudeChatAgent(claude, engine)  # type: ignore[arg-type]
-    events = await collect(agent.ask(rid, r, "analyst", "Why is F1 flagged?"))
+    events = await collect(agent.ask(rid, r, "analyst", "Why is F2 flagged?"))
 
     kinds = [e.type for e in events]
     assert (
         kinds[0] == "conversation" and kinds[-1] == "done" and "tool" in kinds and "text" in kinds
     )
     tool_event = next(e for e in events if e.type == "tool")
-    assert tool_event.data == {"name": "get_flag_evidence", "input": {"flag_id": "F1"}}
+    assert tool_event.data == {"name": "get_flag_evidence", "input": {"flag_id": "F2"}}
     done = events[-1].data
-    assert done["citations"] == [evidence_id, "F1"]
+    assert done["citations"] == [evidence_id, "F2"]
     assert done["unknown_citations"] == ["E999"]  # cited something that isn't in the report
     assert done["usage"] == {"input_tokens": 2000, "output_tokens": 400}
 
@@ -150,12 +150,12 @@ async def test_tool_loop_answers_with_verified_citations(engine: Engine, report)
 async def test_history_is_append_only_and_replayed_verbatim(engine: Engine, report) -> None:
     rid, r = report
     claude = ScriptedClaude(
-        EXPLAIN_F1,
+        EXPLAIN_F2,
         ([say("It is a fall in net assets.")], "end_turn"),
         ([say("No other flags were raised.")], "end_turn"),
     )
     agent = ClaudeChatAgent(claude, engine)  # type: ignore[arg-type]
-    first = await collect(agent.ask(rid, r, "analyst", "Why is F1 flagged?"))
+    first = await collect(agent.ask(rid, r, "analyst", "Why is F2 flagged?"))
     conversation_id = first[0].data["conversation_id"]
     await collect(agent.ask(rid, r, "analyst", "Anything else?", conversation_id))
 
@@ -246,12 +246,12 @@ async def test_conversations_are_private_and_tied_to_their_report(engine: Engine
 
 async def test_chat_endpoint_streams_and_keeps_a_transcript(engine: Engine, report) -> None:
     rid, _ = report
-    claude = ScriptedClaude(EXPLAIN_F1, ([say("Net assets fell sharply.")], "end_turn"))
+    claude = ScriptedClaude(EXPLAIN_F2, ([say("Net assets fell sharply.")], "end_turn"))
     async with troubled_company().client() as ch:
         app = create_app(engine=engine, client=ch, chat_agent=ClaudeChatAgent(claude, engine))  # type: ignore[arg-type]
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://t") as http:
-            ask = {"question": "Why F1?"}
+            ask = {"question": "Why F2?"}
             async with http.stream("POST", f"/reports/{rid}/chat", json=ask) as res:
                 assert res.headers["content-type"].startswith("text/event-stream")
                 body = "".join([c async for c in res.aiter_text()])
@@ -262,7 +262,7 @@ async def test_chat_endpoint_streams_and_keeps_a_transcript(engine: Engine, repo
             conv = events[0]["conversation_id"]
             turns = (await http.get(f"/reports/{rid}/chat/{conv}")).json()
             assert [t["role"] for t in turns] == ["analyst", "assistant", "tool", "assistant"]
-            assert turns[0]["text"] == "Why F1?"
+            assert turns[0]["text"] == "Why F2?"
             other = await http.get(f"/reports/{rid}/chat/{conv}", headers={"X-User": "intruder"})
             assert other.status_code == 404
 
@@ -344,18 +344,18 @@ SIGNATURE = {"extra_content": {"google": {"thought_signature": "sig-xyz"}}}
 
 async def test_openai_compatible_tool_loop(engine: Engine, report) -> None:
     rid, r = report
-    evidence_id = r.flags[0].evidence_ids[0]
+    evidence_id = r.flags[1].evidence_ids[0]
     llm = ScriptedOpenAI(
-        oai_reply("Checking.", [("get_flag_evidence", {"flag_id": "F1"}, SIGNATURE)], "tool_calls"),
-        oai_reply(f"Net assets fell to £8,000 [{evidence_id}], see [F1]."),
+        oai_reply("Checking.", [("get_flag_evidence", {"flag_id": "F2"}, SIGNATURE)], "tool_calls"),
+        oai_reply(f"Net assets fell to £8,000 [{evidence_id}], see [F2]."),
         oai_reply("Nothing else was flagged."),
     )
     agent = OpenAICompatibleChatAgent(llm, engine, model="gemini-3.5-flash")  # type: ignore[arg-type]
-    events = await collect(agent.ask(rid, r, "analyst", "Why is F1 flagged?"))
+    events = await collect(agent.ask(rid, r, "analyst", "Why is F2 flagged?"))
 
     assert [e.type for e in events if e.type in ("tool", "done")] == ["tool", "done"]
     done = events[-1].data
-    assert done["citations"] == [evidence_id, "F1"]
+    assert done["citations"] == [evidence_id, "F2"]
     assert done["usage"] == {"input_tokens": 2000, "output_tokens": 400}
     assert done["cost_usd"] == 0  # free tier
 
@@ -381,7 +381,7 @@ async def test_openai_compatible_tool_loop(engine: Engine, report) -> None:
     third = llm.requests[2]["messages"]
     assert third[: len(second["messages"]) + 1] == [
         *second["messages"],
-        {"role": "assistant", "content": f"Net assets fell to £8,000 [{evidence_id}], see [F1]."},
+        {"role": "assistant", "content": f"Net assets fell to £8,000 [{evidence_id}], see [F2]."},
     ]
     assert third[-1] == {"role": "user", "content": "Anything else?"}
 

@@ -37,7 +37,7 @@ from ukco.report.schema import RiskReport
 from ukco.report.validate import DbEvidenceStore
 from ukco.risk import default_policy
 
-AGENT_VERSION = "chat-v3"  # v2: company_status rule; v3: financial_substance note
+AGENT_VERSION = "chat-v4"  # v2: company_status; v3: financial_substance; v4: filing_history
 BINDING_BETA = "thinking-binding-controls-2026-08-01"
 MAX_STEPS = 6  # model calls per question
 MAX_QUESTION_CHARS = 1000
@@ -66,6 +66,7 @@ RULE_DESCRIPTIONS = {
     "company_status": "Insolvent or closed (a knockout: score 100), or being struck off.",
     "overdue_accounts": "Annual accounts past their statutory filing deadline.",
     "overdue_confirmation_statement": "Confirmation statement past its deadline.",
+    "filing_history": "Accounts or confirmation statements filed late in the last 24 months.",
     "director_churn": "Director appointments and resignations in a recent window.",
     "psc_changes": "Changes to people with significant control (owners/controllers).",
     "office_changes": "Registered office moves, and disputed/undeliverable office markers.",

@@ -45,10 +45,10 @@ async def test_report_job_runs_to_a_stored_report(api) -> None:
     detail = await create_and_finish(http, app)
 
     assert detail["status"] == "succeeded" and detail["requested_by"] == "local-dev"
-    assert detail["risk_score"] == 15
+    assert detail["risk_score"] == 14  # late filing 10 + financial deterioration 4
     report = detail["report"]
     assert report["company"]["company_number"] == ACTIVE
-    assert [f["id"] for f in report["flags"]] == ["F1"]
+    assert [f["id"] for f in report["flags"]] == ["F1", "F2"]
     assert detail["decisions"] == {}
 
     listed = (await http.get("/reports", params={"company_number": ACTIVE})).json()
@@ -78,7 +78,7 @@ async def test_progress_events_stream_every_stage(api) -> None:
         "validating",
         "succeeded",
     ]
-    assert events[-1]["risk_score"] == 15
+    assert events[-1]["risk_score"] == 14
 
 
 async def test_invalid_requests_are_rejected(api) -> None:
@@ -123,12 +123,14 @@ async def test_reviews_build_an_append_only_audit_trail(api, engine: Engine) -> 
         json={"flag_id": "F1", "decision": "dismiss", "note": "Explained by dividend"},
         headers=analyst,
     )
+    await http.post(reviews, json={"flag_id": "F2", "decision": "confirm"}, headers=analyst)
     await http.post(reviews, json={"decision": "approve"}, headers={"X-User": "lead@example.com"})
 
     trail = (await http.get(reviews)).json()
     assert [(r["target"], r["decision"], r["reviewer"]) for r in trail] == [
         ("F1", "confirm", "analyst@example.com"),
         ("F1", "dismiss", "analyst@example.com"),
+        ("F2", "confirm", "analyst@example.com"),
         ("report", "approve", "lead@example.com"),
     ]
     assert all(r["rules_version"] for r in trail)  # each decision records what was reviewed
@@ -141,7 +143,7 @@ async def test_reviews_build_an_append_only_audit_trail(api, engine: Engine) -> 
         conn.execute(text("UPDATE reviews SET decision = 'confirm'"))
     with pytest.raises(DBAPIError, match="append-only"), engine.begin() as conn:
         conn.execute(text("DELETE FROM reviews"))
-    assert len((await http.get(reviews)).json()) == 3
+    assert len((await http.get(reviews)).json()) == 4
 
 
 @pytest.mark.parametrize(
@@ -299,8 +301,10 @@ async def test_a_report_cannot_be_approved_with_unreviewed_flags(api) -> None:
     reviews = f"/reports/{rid}/reviews"
 
     early = await http.post(reviews, json={"decision": "approve"})
-    assert early.status_code == 409 and "pending: F1" in early.text
+    assert early.status_code == 409 and "pending: F1, F2" in early.text
     await http.post(reviews, json={"flag_id": "F1", "decision": "confirm"})
+    assert (await http.post(reviews, json={"decision": "approve"})).status_code == 409
+    await http.post(reviews, json={"flag_id": "F2", "decision": "confirm"})
     assert (await http.post(reviews, json={"decision": "approve"})).status_code == 201
 
     listed = (await http.get("/reports")).json()

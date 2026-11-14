@@ -27,6 +27,11 @@ class ChangesBand(_Strict):
     severity: Severity
 
 
+class LateBand(_Strict):
+    min_late: int
+    severity: Severity
+
+
 class CompanyStatusRule(_Strict):
     knockout_statuses: list[str]
     knockout_filing_prefixes: list[str]
@@ -38,6 +43,12 @@ class CompanyStatusRule(_Strict):
 
 class OverdueRule(_Strict):
     severity_by_days_overdue: list[DaysBand]
+
+
+class FilingHistoryRule(_Strict):
+    window_months: int
+    grace_days: int
+    severity_by_late_filings: list[LateBand]
 
 
 class ChangesRule(_Strict):
@@ -83,6 +94,7 @@ class Rules(_Strict):
     company_status: CompanyStatusRule
     overdue_accounts: OverdueRule
     overdue_confirmation_statement: OverdueRule
+    filing_history: FilingHistoryRule
     director_churn: ChangesRule
     psc_changes: ChangesRule
     office_changes: OfficeChangesRule
@@ -95,6 +107,8 @@ class Rules(_Strict):
 class Policy(_Strict):
     version: int
     points: dict[Severity, int]
+    # Per flag type: points = severity points x weight, rounded. Unlisted types weigh 1.
+    score_weights: dict[str, float] = {}
     rules: Rules
     high_risk_sic_codes: dict[str, str]
     sha256: str = ""  # of the source file; recorded on every report
@@ -117,6 +131,10 @@ def worst(severities: list[Severity]) -> Severity | None:
 
 def band_for_days(bands: list[DaysBand], days: int) -> Severity | None:
     return worst([b.severity for b in bands if days >= b.min_days])
+
+
+def band_for_late(bands: list[LateBand], late: int) -> Severity | None:
+    return worst([b.severity for b in bands if late >= b.min_late])
 
 
 def band_for_changes(bands: list[ChangesBand], changes: int) -> Severity | None:

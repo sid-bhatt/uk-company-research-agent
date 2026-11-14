@@ -18,9 +18,21 @@ from ukco.companies_house.models import FilingHistoryItem, Officer
 from ukco.evidence import Citation, EvidenceIndex
 from ukco.financials.extract import FinancialFact
 from ukco.ingest.company import AccountsDocument, CompanyBundle
-from ukco.risk.deadlines import accounts_due, add_months, confirmation_statement_due
+from ukco.risk.deadlines import (
+    PUBLIC_COMPANY_TYPES,
+    accounts_due,
+    add_months,
+    confirmation_statement_due,
+)
 from ukco.risk.models import Flag, RuleOutcome
-from ukco.risk.policy import Policy, Severity, band_for_changes, band_for_days, worst
+from ukco.risk.policy import (
+    Policy,
+    Severity,
+    band_for_changes,
+    band_for_days,
+    band_for_late,
+    worst,
+)
 
 CLOSURE_FILING_PREFIXES = ("LIQ", "AM", "GAZ2", "DS01", "COCOMP", "4.", "2.")
 MAX_CITATIONS_PER_FLAG = 10
@@ -76,7 +88,9 @@ class RuleContext:
         return Flag(
             flag_type=flag_type,
             severity=severity,
-            points=self.policy.points[severity],
+            points=round(
+                self.policy.points[severity] * self.policy.score_weights.get(flag_type, 1.0)
+            ),
             title=title,
             explanation=explanation,
             evidence=_unique(evidence)[:MAX_CITATIONS_PER_FLAG],
@@ -300,6 +314,102 @@ def overdue_confirmation_statement(ctx: RuleContext) -> RuleOutcome:
                 due=due.isoformat(),
                 method=method,
                 computed_due=computed_due.isoformat(),
+            )
+        ],
+    )
+
+
+@dataclass(frozen=True)
+class LateFiling:
+    filing: FilingHistoryItem
+    filed: dt.date
+    kind: str  # "accounts" | "confirmation statement"
+    made_up_to: dt.date
+    due: dt.date
+
+    @property
+    def days_late(self) -> int:
+        return (self.filed - self.due).days
+
+
+def _late_filings(ctx: RuleContext) -> tuple[list[LateFiling], int]:
+    """Accounts and confirmation statements filed after their deadline (oldest first), and
+    how many were checked.
+
+    Accounts (Companies Act 2006 s.442): due 9 months (public: 6) after the period they were
+    made up to. First accounts covering more than 12 months are due 21 (18) months after
+    incorporation, or 3 months after the period ends if that is later. Deadlines come from
+    each filing's own made-up date, so changed accounting reference dates don't show as late.
+    Confirmation statements: due 12 months and 14 days after the previous made-up date.
+    """
+    grace = dt.timedelta(days=ctx.policy.rules.filing_history.grace_days)
+    public = ctx.bundle.profile.type in PUBLIC_COMPANY_TYPES
+    late: list[LateFiling] = []
+
+    def dated(*types: str) -> list[tuple[dt.date, dt.date, FilingHistoryItem]]:
+        return sorted(
+            ((m, f.date, f) for f in ctx.filings(*types) if (m := _made_up_date(f)) and f.date),
+            key=lambda x: x[0],
+        )
+
+    accounts = dated("AA")
+    for i, (made_up, filed, f) in enumerate(accounts):
+        if i == 0 and made_up > add_months(ctx.incorporated, 12):
+            due = max(add_months(ctx.incorporated, 18 if public else 21), add_months(made_up, 3))
+        else:
+            due = add_months(made_up, 6 if public else 9)
+        if filed > due + grace:
+            late.append(LateFiling(f, filed, "accounts", made_up, due))
+
+    statements = dated("CS01", "AR01")
+    previous = ctx.incorporated
+    for made_up, filed, f in statements:
+        _, due = confirmation_statement_due(ctx.incorporated, previous)
+        if filed > due + grace:
+            late.append(LateFiling(f, filed, "confirmation statement", made_up, due))
+        previous = max(previous, made_up)
+    return sorted(late, key=lambda x: x.filed), len(accounts) + len(statements)
+
+
+def filing_history(ctx: RuleContext) -> RuleOutcome:
+    """Accounts or confirmation statements filed late in the past (not just overdue now)."""
+    rule = "filing_history"
+    cfg = ctx.policy.rules.filing_history
+    all_late, checked = _late_filings(ctx)
+    late = [x for x in all_late if _in_window(x.filed, ctx, cfg.window_months)]
+    severity = band_for_late(cfg.severity_by_late_filings, len(late))
+    if severity is None:
+        return RuleOutcome(
+            rule=rule,
+            status="clear",
+            note=f"No late filings in the {cfg.window_months} months to {ctx.as_of} "
+            f"({checked} accounts and confirmation statements on file).",
+        )
+    described = "; ".join(
+        f"{x.kind} made up to {x.made_up_to} filed {x.days_late} days late" for x in late[-3:]
+    )
+    return RuleOutcome(
+        rule=rule,
+        status="flagged",
+        flags=[
+            ctx.flag(
+                rule,
+                severity,
+                "History of late filing",
+                f"{len(late)} filing(s) made after the deadline in the {cfg.window_months} "
+                f"months to {ctx.as_of} (most recent: {described}).",
+                [ctx.filing(x.filing) for x in late] + [ctx.profile("/date_of_creation")],
+                late_filings=len(late),
+                events=[
+                    {
+                        "kind": x.kind,
+                        "made_up_to": x.made_up_to.isoformat(),
+                        "due": x.due.isoformat(),
+                        "filed": x.filed.isoformat(),
+                        "days_late": x.days_late,
+                    }
+                    for x in late
+                ],
             )
         ],
     )
@@ -793,6 +903,7 @@ RULES: list[Callable[[RuleContext], RuleOutcome]] = [
     company_status,
     overdue_accounts,
     overdue_confirmation_statement,
+    filing_history,
     director_churn,
     psc_changes,
     office_changes,

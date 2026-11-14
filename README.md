@@ -161,18 +161,20 @@ rule, with a regression test.
 
 Scored **as of 30 Sep 2024** using only what was known then; outcome = compulsory strike-off
 or insolvency in the next 18 months. Real companies, frozen snapshots, no live API calls.
-Two sets: **v0** (60 companies), which the rules were developed against and CI runs on every
-PR; and **test-v1** (100 different companies), held out: run rarely, every run logged.
+Three sets: **dev-v1** (400 companies), which rules and weights are developed on; **v0**
+(60), the regression check CI runs on every PR; and **test-v1** (100 different companies),
+held out: run rarely, every run logged.
 Method and caveats: [evals/README.md](evals/README.md).
 
-| Metric (current rules, policy v3) | v0, development (60) | **test-v1, held out (100)** |
-|---|---|---|
-| Risk score vs adverse outcome | 0.68 [0.55, 0.79] | **0.57** [0.47, 0.67] |
-| …without filing-deadline flags | 0.61 [0.49, 0.72] | **0.50** [0.41, 0.59] |
-| …insolvency vs survived only | 0.63 [0.44, 0.81] | 0.62 [0.48, 0.76] |
+| Metric | test-v1, policy v3 | **test-v1, policy v4** | dev-v1, policy v4 |
+|---|---|---|---|
+| Risk score vs adverse outcome | 0.57 [0.47, 0.67] | **0.66** [0.55, 0.76] | 0.69 [0.64, 0.74] |
+| …without filing-deadline flags | 0.50 [0.41, 0.59] | **0.60** [0.49, 0.71] | 0.62 [0.57, 0.68] |
+| …insolvency vs survived only | 0.62 [0.48, 0.76] | **0.67** [0.53, 0.81] | 0.66 [0.58, 0.73] |
 
-Takeaway: the development-set number was optimistic. On fresh companies the score is barely
-better than chance, and without the filing-deadline flags (which partly *cause* compulsory
-strike-off) it has no signal at all; `net_liabilities`, the strongest flag on v0, raises more
-false alarms than catches on test-v1. The v1 rules see distress that's already visible, not
-distress that's coming. New rules are developed on v0 and measured once on test-v1.
+Takeaway: the v3 rules saw distress that was already visible (overdue filings) and little
+else: on fresh companies they were barely better than chance. Policy v4 adds a **late filing
+history** rule (a habit of filing late, not just overdue today), looks at director changes
+over 24 months, and sets each rule's points from data (fitted on dev-v1 only). On the
+held-out set it rose to 0.66, and to 0.60 without the deadline flags. That's a modest,
+honest triage signal, not a prediction; the intervals are wide at 100 companies.
