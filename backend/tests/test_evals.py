@@ -1,6 +1,7 @@
 """Eval machinery: outcome labels, metrics, and frozen-snapshot replay."""
 
 import datetime as dt
+import re
 from pathlib import Path
 
 import pytest
@@ -141,6 +142,11 @@ async def test_frozen_snapshot_replays_the_same_assessment(tmp_path: Path) -> No
 # --- Eval sets: sizing and the held-out test set -------------------------------------------
 
 
+def plain(output: str) -> str:
+    """CLI output without colour codes and box-drawing wraps (CI terminals add colour)."""
+    return re.sub(r"\s+", " ", re.sub(r"\x1b\[[0-9;]*m", "", output)).replace("│", "")
+
+
 @pytest.mark.parametrize("size", [60, 100, 37, 1])
 def test_scaled_quotas_keep_proportions_and_size(size: int) -> None:
     quotas = scaled_quotas(size)
@@ -165,7 +171,7 @@ def test_held_out_sets_need_a_reason_and_are_never_a_baseline(
         (["eval", "run", "--name", "test-v9", "--reason", "x", "--check"], "never"),
     ]:
         result = runner.invoke(cli.app, args)
-        assert result.exit_code != 0 and message in result.output, args
+        assert result.exit_code != 0 and message in plain(result.output), args
 
 
 def test_frozen_sets_are_never_rebuilt_in_place(
@@ -179,4 +185,4 @@ def test_frozen_sets_are_never_rebuilt_in_place(
     (tmp_path / "data" / "v0").mkdir(parents=True)
     (tmp_path / "data" / "v0" / "snapshot.jsonl.gz").write_bytes(b"")
     result = CliRunner().invoke(cli.app, ["eval", "build", "--name", "v0"])
-    assert result.exit_code != 0 and "frozen" in result.output
+    assert result.exit_code != 0 and "frozen" in plain(result.output)
