@@ -11,7 +11,7 @@ variable "github_oidc_subject_prefix" {
       gh api repos/<owner>/<repo>/actions/oidc/customization/sub   (sub_claim_prefix)
   EOT
   type        = string
-  default     = "repo:sid-bhatt@70953578/uk-company-research-agent@1393059532"
+  default     = "repo:sid-bhatt@70953578/uk-company-research-agent@1472109773"
 }
 
 variable "instance_type" {
