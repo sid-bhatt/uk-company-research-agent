@@ -65,4 +65,4 @@ Candidates (pick one, measure against the week-6 eval baseline):
 | 7 | Domain | Optional: `<ip>.sslip.io` gives real HTTPS until one is bought |
 | 8 | AWS budget | $20/month, alerts at 50/80/100% + forecast. Hosting: one server ([ADR-005](adr/0005-lean-single-server-hosting.md)), ~$12–15/month |
 | 9 | Airflow | Watchlist monitoring + snapshot refresh; local Docker, prod as a scheduled container on the server |
-| 10 | Repo visibility | Private until v1, then public. **Before going public:** rewrite git history to purge real names from early KYB fixtures (commits in #4/#5; fixed in Day 6) |
+| 10 | Repo visibility | Public since 2026-11-25. Before publishing, the git history was rewritten so no commit holds personal data: real names in an early KYB fixture (Day 4–5, pseudonymised on Day 6) and filing free text in old eval snapshots. Pull-request history up to then is in a private archive repository |

@@ -69,8 +69,7 @@ after the period ends.
 
 `filing_history` is the broadest flag (55 of 100 held-out companies: catches 61% of failures,
 false alarm on 48% of the rest), so it scores low on its own (10 points at medium) and
-matters most in combination. The `+changes` on the v4 access-log line is an untracked
-scratch file in the working tree, not code: the run used commit `ed4240b` as committed.
+matters most in combination. The v4 run used the code merged as commit `6edaecc`.
 
 ### Policy v3 on the development set (before week 4)
 

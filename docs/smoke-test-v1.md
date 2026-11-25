@@ -5,7 +5,7 @@ deployed API, the way the web app calls it: search, take the first hit (what pre
 does), run the report, follow its progress events, check the stored result. Authenticated
 with a short-lived token signed like the web app's.
 
-## Run 1: deployed `main` (6106d62)
+## Run 1: deployed `main` (deefa66)
 
 | Searched | Company | Status | Report | Time | Score | Flags | Not assessed | Evidence | CH calls |
 |---|---|---|---|---|---|---|---|---|---|
@@ -38,7 +38,7 @@ All reports succeeded and passed citation validation, each in under 2 seconds.
 4. **Known false positive:** director churn on large boards (Greggs medium, IKEA high) reflects
    normal rotation on big boards. Making churn relative to board size is in the plan.
 
-## Run 2: after the fix deployed (`main` b4f3496, policy v2)
+## Run 2: after the fix deployed (`main` bc522ec, policy v2)
 
 | Searched | Company | Status | Report | Time | Score | Flags | Not assessed | Evidence | CH calls |
 |---|---|---|---|---|---|---|---|---|---|
