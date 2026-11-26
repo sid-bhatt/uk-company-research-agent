@@ -39,6 +39,9 @@ class CompanyStatusRule(_Strict):
     strike_off_withdrawal_prefixes: list[str]
     strike_off_window_months: int
     strike_off_severity: Severity
+    restoration_filing_prefixes: list[str]
+    restored_window_months: int
+    restored_severity: Severity
 
 
 class OverdueRule(_Strict):

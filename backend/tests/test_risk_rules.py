@@ -564,7 +564,7 @@ async def test_score_is_capped_at_100() -> None:
 
 def test_policy_is_strict_and_hashed(tmp_path) -> None:
     policy = default_policy()
-    assert len(policy.sha256) == 64 and policy.version == 4
+    assert len(policy.sha256) == 64 and policy.version == 5
     bad = tmp_path / "policy.yaml"
     bad.write_text(DEFAULT_POLICY.read_text() + "\nunexpected_key: 1\n")
     with pytest.raises(ValueError):
@@ -623,6 +623,52 @@ async def test_strike_off_is_flagged_unless_withdrawn() -> None:
     ds02 = {**gaz1, "type": "DS02", "date": "2026-08-20", "transaction_id": "Withdrawn0001"}
     history["items"].insert(0, ds02)
     assert outcome(await run(ch, ACTIVE), "company_status").status == "clear"
+
+
+def add_filings(ch: FakeCompaniesHouse, *filings: tuple[str, str]) -> None:
+    """Insert (type, date) filings into the active company's history, newest first."""
+    history = edit(ch, f"/company/{ACTIVE}/filing-history")
+    template = history["items"][0]
+    for i, (kind, date) in enumerate(filings):
+        history["items"].insert(
+            0, {**template, "type": kind, "date": date, "transaction_id": f"Added{i:04d}"}
+        )
+    history["items"].sort(key=lambda f: f["date"], reverse=True)
+
+
+async def test_a_restored_company_is_flagged_but_not_knocked_out() -> None:
+    # Struck off for not filing, dissolved, then restored a month later (Boundaryless Ltd,
+    # report 8, was scored 100 for a dissolution that a restoration had undone).
+    ch = FakeCompaniesHouse()
+    add_filings(ch, ("GAZ1", "2025-07-01"), ("GAZ2", "2025-10-14"), ("RT01", "2025-11-13"))
+
+    result = await run(ch, ACTIVE)
+    status = outcome(result, "company_status")
+    (flag,) = status.flags
+    assert flag.flag_type == "restored_company" and flag.severity == "high"
+    assert "knockout" not in flag.details and result.risk_score < 100
+    assert flag.details["superseded_filings"] == ["GAZ1", "GAZ2"]
+    assert "dissolved on 2025-10-14 and restored" in flag.explanation
+    assert flag.points == points("restored_company", "high")
+    # Filing obligations apply again once restored.
+    assert outcome(result, "overdue_accounts").status == "clear"
+
+
+async def test_closure_after_a_restoration_is_still_a_knockout() -> None:
+    ch = FakeCompaniesHouse()
+    add_filings(ch, ("GAZ2", "2024-10-15"), ("RT01", "2024-11-13"), ("LIQ02", "2026-06-01"))
+    result = await run(ch, ACTIVE)
+    assert result.risk_score == 100
+    assert outcome(result, "company_status").flags[0].details["knockout"]
+
+
+async def test_a_restoration_over_36_months_ago_is_not_flagged() -> None:
+    ch = FakeCompaniesHouse()
+    add_filings(ch, ("GAZ2", "2021-06-01"), ("RT01", "2021-07-01"))
+    # More than 36 months before the assessment date: no flag, and no knockout.
+    result = await run(ch, ACTIVE)
+    assert outcome(result, "company_status").status == "clear"
+    assert result.risk_score < 100
 
 
 async def test_an_active_company_is_clear() -> None:

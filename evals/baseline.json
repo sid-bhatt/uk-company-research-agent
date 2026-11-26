@@ -2,7 +2,7 @@
   "dataset": "v0",
   "as_of": "2024-09-30",
   "window_months": 18,
-  "policy_sha256": "3ad802d0d0c397c3d0d02ef77ba5c891ef7a7a918b8ebe828078a48682b894bc",
+  "policy_sha256": "50d1ddfbc06a999779ac84ae2c84044d8aad0e66ba2f5d54a29407c10114f4fe",
   "companies": 60,
   "outcomes": {
     "compulsory_strike_off": 20,
