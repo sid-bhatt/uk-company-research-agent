@@ -4,7 +4,7 @@
 # The values are deliberately in config, not code: policy changes shouldn't need a
 # deploy, and every report records the hash of the policy that produced it.
 
-version: 4
+version: 5
 
 # Points per severity. Risk score = sum of points over flags, capped at 100; a knockout
 # flag (see company_status) sets it to 100 outright.
@@ -46,6 +46,12 @@ rules:
     strike_off_withdrawal_prefixes: [DS02]
     strike_off_window_months: 12
     strike_off_severity: high
+    # Restored to the register (RT01 administrative restoration, AC92 court order): the
+    # dissolution or closure filed before it no longer applies, so it isn't a knockout.
+    # Being struck off and restored (usually for not filing) is itself a warning sign.
+    restoration_filing_prefixes: [RT01, AC92]
+    restored_window_months: 36
+    restored_severity: high
 
   overdue_accounts:
     # Severity by days past the filing deadline.

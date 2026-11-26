@@ -116,11 +116,25 @@ def _in_window(
     return d if after is None or d > after else None
 
 
+def _restorations(ctx: RuleContext) -> list[FilingHistoryItem]:
+    """Restorations to the register by as_of, newest first."""
+    prefixes = tuple(ctx.policy.rules.company_status.restoration_filing_prefixes)
+    return [f for f in ctx.filings() if f.type and f.type.startswith(prefixes)]
+
+
+def _since_restoration(ctx: RuleContext) -> list[FilingHistoryItem]:
+    """Filings by as_of, newest first, that a later restoration hasn't superseded: a
+    dissolution or closure filed before the company was restored no longer applies."""
+    restored = _restorations(ctx)
+    last = restored[0].date if restored else None
+    return [f for f in ctx.filings() if last is None or (f.date and f.date > last)]
+
+
 def _closed_or_insolvent(ctx: RuleContext) -> str | None:
     """Filing obligations stop in liquidation/administration/dissolution."""
     if ctx.live and ctx.bundle.profile.company_status not in (None, "active"):
         return f"company status is '{ctx.bundle.profile.company_status}'"
-    for f in ctx.filings():
+    for f in _since_restoration(ctx):
         if f.type and f.type.startswith(CLOSURE_FILING_PREFIXES):
             return f"closure/insolvency filing {f.type} on {f.date}"
     return None
@@ -150,10 +164,9 @@ def company_status(ctx: RuleContext) -> RuleOutcome:
                 )
             ],
         )
+    current = _since_restoration(ctx)
     closures = [
-        f
-        for f in ctx.filings()
-        if f.type and f.type.startswith(tuple(cfg.knockout_filing_prefixes))
+        f for f in current if f.type and f.type.startswith(tuple(cfg.knockout_filing_prefixes))
     ]
     if closures:
         first = min(closures, key=lambda f: f.date or ctx.as_of)
@@ -177,7 +190,7 @@ def company_status(ctx: RuleContext) -> RuleOutcome:
 
     strike_off = [
         f
-        for f in ctx.filings()
+        for f in current
         if f.type
         and f.type.startswith(tuple(cfg.strike_off_filing_prefixes))
         and _in_window(f.date, ctx, cfg.strike_off_window_months)
@@ -211,6 +224,41 @@ def company_status(ctx: RuleContext) -> RuleOutcome:
                     f"{what}; a struck-off company is dissolved and stops existing.",
                     evidence,
                     filing_types=sorted({f.type for f in strike_off if f.type}),
+                )
+            ],
+        )
+    restored = [
+        f for f in _restorations(ctx) if _in_window(f.date, ctx, cfg.restored_window_months)
+    ]
+    if restored:
+        latest_restoration = restored[0]
+        superseded = [
+            f
+            for f in ctx.filings()
+            if f.type
+            and f.date
+            and latest_restoration.date
+            and f.date <= latest_restoration.date
+            and f.type.startswith(
+                tuple(cfg.knockout_filing_prefixes) + tuple(cfg.strike_off_filing_prefixes)
+            )
+        ]
+        dissolved = next((f for f in superseded if f.type == "GAZ2"), None)
+        what = f"dissolved on {dissolved.date} and " if dissolved else ""
+        return RuleOutcome(
+            rule=rule,
+            status="flagged",
+            flags=[
+                ctx.flag(
+                    "restored_company",
+                    cfg.restored_severity,
+                    "Struck off and restored to the register",
+                    f"The company was {what}restored to the register ({latest_restoration.type}) "
+                    f"on {latest_restoration.date}. A company is usually struck off for not "
+                    "filing; it is active again, so this is not a knockout.",
+                    [ctx.filing(latest_restoration)] + [ctx.filing(f) for f in superseded],
+                    restored_on=str(latest_restoration.date),
+                    superseded_filings=sorted({f.type for f in superseded if f.type}),
                 )
             ],
         )
